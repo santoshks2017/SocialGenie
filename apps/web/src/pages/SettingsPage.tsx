@@ -1,6 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Check, AlertCircle, RefreshCw, Trash2 } from 'lucide-react';
+import { Check, AlertCircle, RefreshCw, Trash2, UserPlus, Shield, ShieldOff, ChevronDown, ChevronUp } from 'lucide-react';
 import { Button } from '../components/ui/Button';
+import { useToast } from '../components/ui/Toast';
+import { useAuth } from '../contexts/AuthContext';
+import { userService } from '../services/users';
+import { CONFIGURABLE_PERMISSIONS, ROLE_LABELS, isAtLeast } from '../lib/permissions';
+import type { Permission } from '../lib/permissions';
+import type { TeamMember } from '../services/users';
 import api from '../services/api';
 
 type PlatformStatus = 'connected' | 'disconnected' | 'expired';
@@ -68,9 +74,11 @@ const NOTIFICATION_KEYS = [
   { key: 'monthly_report', label: 'Monthly performance report', defaultOn: true },
 ];
 
-type Tab = 'profile' | 'platforms' | 'preferences';
+type Tab = 'profile' | 'platforms' | 'preferences' | 'team';
 
 export default function SettingsPage() {
+  const { user } = useAuth();
+  const { addToast } = useToast();
   const [activeTab, setActiveTab] = useState<Tab>('profile');
   const [platforms, setPlatforms] = useState<PlatformInfo[]>(INITIAL_PLATFORMS);
   const [selectedLangs, setSelectedLangs] = useState<string[]>(['en', 'hi']);
@@ -88,6 +96,17 @@ export default function SettingsPage() {
     return new Set(NOTIFICATION_KEYS.filter((n) => n.defaultOn).map((n) => n.key));
   });
   const [saved, setSaved] = useState(false);
+
+  // Team tab state
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [loadingTeam, setLoadingTeam] = useState(false);
+  const [showInviteForm, setShowInviteForm] = useState(false);
+  const [invitePhone, setInvitePhone] = useState('');
+  const [inviteName, setInviteName] = useState('');
+  const [inviteRole, setInviteRole] = useState<'admin' | 'user'>('user');
+  const [submittingInvite, setSubmittingInvite] = useState(false);
+  const [expandedUser, setExpandedUser] = useState<string | null>(null);
+  const [editingPerms, setEditingPerms] = useState<Record<string, Record<string, boolean>>>({});
 
   useEffect(() => {
     api.get<{ success: boolean; profile: {
@@ -124,6 +143,67 @@ export default function SettingsPage() {
     }).catch(console.error);
   }, []);
 
+  useEffect(() => {
+    if (activeTab === 'team' && isAtLeast(user, 'admin')) {
+      setLoadingTeam(true);
+      userService.list()
+        .then((res) => setTeamMembers(res.users))
+        .catch(() => addToast({ type: 'error', message: 'Failed to load team members' }))
+        .finally(() => setLoadingTeam(false));
+    }
+  }, [activeTab]);
+
+  const handleInvite = async () => {
+    if (!invitePhone) return;
+    setSubmittingInvite(true);
+    try {
+      const res = await userService.invite({ phone: invitePhone, name: inviteName || undefined, role: inviteRole });
+      setTeamMembers((prev) => [...prev, res.user]);
+      setShowInviteForm(false);
+      setInvitePhone('');
+      setInviteName('');
+      setInviteRole('user');
+      addToast({ type: 'success', message: 'User invited successfully' });
+    } catch {
+      addToast({ type: 'error', message: 'Failed to invite user' });
+    } finally {
+      setSubmittingInvite(false);
+    }
+  };
+
+  const handleToggleActive = async (member: TeamMember) => {
+    try {
+      const res = await userService.setActive(member.id, !member.isActive);
+      setTeamMembers((prev) => prev.map((m) => m.id === member.id ? res.user : m));
+      addToast({ type: 'success', message: `User ${res.user.isActive ? 'activated' : 'deactivated'}` });
+    } catch {
+      addToast({ type: 'error', message: 'Failed to update user status' });
+    }
+  };
+
+  const handleSavePermissions = async (member: TeamMember) => {
+    const perms = editingPerms[member.id];
+    if (!perms) return;
+    try {
+      const res = await userService.updatePermissions(member.id, perms);
+      setTeamMembers((prev) => prev.map((m) => m.id === member.id ? res.user : m));
+      setEditingPerms((prev) => { const next = { ...prev }; delete next[member.id]; return next; });
+      addToast({ type: 'success', message: 'Permissions updated' });
+    } catch {
+      addToast({ type: 'error', message: 'Failed to update permissions' });
+    }
+  };
+
+  const handleRemoveMember = async (member: TeamMember) => {
+    try {
+      await userService.remove(member.id);
+      setTeamMembers((prev) => prev.filter((m) => m.id !== member.id));
+      addToast({ type: 'success', message: 'User removed' });
+    } catch {
+      addToast({ type: 'error', message: 'Failed to remove user' });
+    }
+  };
+
   const handleConnect = (id: string) => {
     api.get<{ success: boolean; redirect_url: string }>(`/platforms/connect/${id}`)
       .then((res) => { window.location.href = res.redirect_url; })
@@ -159,6 +239,7 @@ export default function SettingsPage() {
     { id: 'profile', label: 'Dealer Profile' },
     { id: 'platforms', label: 'Platform Connections' },
     { id: 'preferences', label: 'Preferences' },
+    ...(isAtLeast(user, 'admin') ? [{ id: 'team' as Tab, label: 'Team' }] : []),
   ];
 
   return (
@@ -430,6 +511,174 @@ export default function SettingsPage() {
             )}
             <Button onClick={handleSave} className="text-sm">Save Preferences</Button>
           </div>
+        </div>
+      )}
+
+      {/* --- TEAM TAB --- */}
+      {activeTab === 'team' && (
+        <div className="space-y-4">
+          {/* Header */}
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="font-semibold text-gray-800">Team Members</h3>
+              <p className="text-sm text-gray-500">Manage your team's access and permissions</p>
+            </div>
+            <Button onClick={() => setShowInviteForm((v) => !v)} className="flex items-center gap-1.5 text-sm">
+              <UserPlus className="w-4 h-4" /> Invite User
+            </Button>
+          </div>
+
+          {/* Invite Form */}
+          {showInviteForm && (
+            <div className="bg-blue-50 border border-blue-100 rounded-xl p-5 space-y-3">
+              <h4 className="font-medium text-gray-800">Invite New Member</h4>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Phone Number *</label>
+                  <input
+                    value={invitePhone}
+                    onChange={(e) => setInvitePhone(e.target.value)}
+                    placeholder="+91 98765 43210"
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Name (optional)</label>
+                  <input
+                    value={inviteName}
+                    onChange={(e) => setInviteName(e.target.value)}
+                    placeholder="John Doe"
+                    className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  />
+                </div>
+              </div>
+              {isAtLeast(user, 'owner') && (
+                <div>
+                  <label className="text-xs text-gray-500 mb-1 block">Role</label>
+                  <select
+                    value={inviteRole}
+                    onChange={(e) => setInviteRole(e.target.value as 'admin' | 'user')}
+                    className="border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  >
+                    <option value="user">User</option>
+                    <option value="admin">Admin</option>
+                  </select>
+                </div>
+              )}
+              <div className="flex gap-2 pt-1">
+                <Button onClick={handleInvite} disabled={!invitePhone || submittingInvite} className="text-sm">
+                  {submittingInvite ? 'Sending...' : 'Send Invite'}
+                </Button>
+                <Button
+                  variant="secondary"
+                  onClick={() => { setShowInviteForm(false); setInvitePhone(''); setInviteName(''); }}
+                  className="text-sm"
+                >
+                  Cancel
+                </Button>
+              </div>
+            </div>
+          )}
+
+          {/* Team List */}
+          {loadingTeam ? (
+            <div className="text-center py-10 text-gray-400 text-sm">Loading team members...</div>
+          ) : teamMembers.length === 0 ? (
+            <div className="text-center py-10 text-gray-400 text-sm bg-white rounded-xl border border-dashed border-gray-200">
+              No team members yet. Invite someone to get started.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {teamMembers.map((member) => (
+                <div key={member.id} className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                  {/* Member row */}
+                  <div className="flex items-center gap-4 p-4">
+                    <div className="w-9 h-9 rounded-full bg-blue-100 flex items-center justify-center text-blue-700 font-semibold text-sm flex-shrink-0">
+                      {member.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <p className="font-medium text-gray-900 text-sm">{member.name}</p>
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                          member.role === 'owner' ? 'bg-purple-100 text-purple-700' :
+                          member.role === 'admin' ? 'bg-blue-100 text-blue-700' :
+                          'bg-gray-100 text-gray-600'
+                        }`}>
+                          {ROLE_LABELS[member.role]}
+                        </span>
+                        {!member.isActive && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-red-50 text-red-500 font-medium">Inactive</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-400 mt-0.5">{member.phone}</p>
+                    </div>
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                      {member.id !== user?.id && (
+                        <button
+                          onClick={() => handleToggleActive(member)}
+                          title={member.isActive ? 'Deactivate user' : 'Activate user'}
+                          className={`p-1.5 rounded-lg transition-colors ${member.isActive ? 'text-green-600 hover:bg-green-50' : 'text-gray-400 hover:bg-gray-50'}`}
+                        >
+                          {member.isActive ? <Shield className="w-4 h-4" /> : <ShieldOff className="w-4 h-4" />}
+                        </button>
+                      )}
+                      {member.role === 'user' && (
+                        <button
+                          onClick={() => setExpandedUser(expandedUser === member.id ? null : member.id)}
+                          className="p-1.5 rounded-lg text-gray-400 hover:bg-gray-50 hover:text-gray-600 transition-colors"
+                          title="Edit permissions"
+                        >
+                          {expandedUser === member.id ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        </button>
+                      )}
+                      {member.id !== user?.id && member.role !== 'owner' && (
+                        <button
+                          onClick={() => handleRemoveMember(member)}
+                          className="p-1.5 rounded-lg text-red-400 hover:bg-red-50 hover:text-red-600 transition-colors"
+                          title="Remove user"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Permission editor */}
+                  {expandedUser === member.id && member.role === 'user' && (
+                    <div className="border-t border-gray-100 p-4 bg-gray-50">
+                      <p className="text-xs font-medium text-gray-600 mb-3">Custom Permissions</p>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        {CONFIGURABLE_PERMISSIONS.map((perm) => (
+                          <label key={perm.key} className="flex items-start gap-2.5 cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={editingPerms[member.id]?.[perm.key] ?? member.permissions[perm.key as Permission] ?? false}
+                              onChange={(e) => setEditingPerms((prev) => ({
+                                ...prev,
+                                [member.id]: { ...(prev[member.id] ?? member.permissions), [perm.key]: e.target.checked },
+                              }))}
+                              className="w-4 h-4 accent-blue-600 mt-0.5 flex-shrink-0"
+                            />
+                            <div>
+                              <p className="text-sm text-gray-700 font-medium">{perm.label}</p>
+                              <p className="text-xs text-gray-400">{perm.description}</p>
+                            </div>
+                          </label>
+                        ))}
+                      </div>
+                      <Button
+                        className="mt-4 text-sm"
+                        disabled={!editingPerms[member.id]}
+                        onClick={() => handleSavePermissions(member)}
+                      >
+                        Save Permissions
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>

@@ -1,7 +1,6 @@
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '../db/prisma.js';
-
-
+import { resolvePermissions, ROLES } from '../lib/permissions.js';
 
 // OTP store — in production use Redis with 10-min TTL
 const otpStore = new Map<string, { otp: string; expires: number }>();
@@ -87,51 +86,80 @@ export default async function authRoutes(fastify: FastifyInstance) {
 
     otpStore.delete(phone);
 
-    // Upsert dealer record
-    const dealer = await prisma.dealer.upsert({
-      where: { phone },
-      create: { phone, name: 'New Dealer', city: '', onboarding_step: 1 },
-      update: {},
-    });
+    const ownerPhone = process.env['OWNER_PHONE'];
 
-    const payload = { dealer_id: dealer.id, phone: dealer.phone };
+    // ── Owner account ────────────────────────────────────────────────────────
+    if (ownerPhone && phone === ownerPhone) {
+      const ownerUser = await prisma.dealerUser.upsert({
+        where: { phone },
+        create: { phone, name: 'Product Owner', role: ROLES.OWNER, dealer_id: null, is_active: true },
+        update: {},
+      });
+      const permissions = resolvePermissions(ownerUser.role);
+      const payload = { dealer_user_id: ownerUser.id, dealer_id: null, role: ownerUser.role, phone, permissions };
+      const token = fastify.jwt.sign(payload, { expiresIn: process.env['JWT_EXPIRES_IN'] ?? '15m' });
+      const refreshToken = fastify.jwt.sign(payload, { expiresIn: process.env['JWT_REFRESH_EXPIRES_IN'] ?? '30d' });
+      const crypto = await import('crypto');
+      await prisma.userSession.create({
+        data: { dealer_user_id: ownerUser.id, token_hash: crypto.createHash('sha256').update(token).digest('hex'), ip_address: request.ip, user_agent: request.headers['user-agent'] ?? null, expires_at: new Date(Date.now() + 15 * 60 * 1000) },
+      });
+      return { token, refreshToken, user: { id: ownerUser.id, name: ownerUser.name, role: ownerUser.role, dealer_id: null, permissions, onboarding_completed: true } };
+    }
+
+    // ── Find existing DealerUser ─────────────────────────────────────────────
+    const existingUser = await prisma.dealerUser.findUnique({ where: { phone } });
+
+    if (existingUser && !existingUser.is_active) {
+      return reply.code(403).send({ error: { code: 'ACCOUNT_INACTIVE', message: 'Your account is inactive. Ask your admin to re-enable it.' } });
+    }
+
+    let dealerUser = existingUser;
+    let dealer = existingUser?.dealer_id
+      ? await prisma.dealer.findUnique({ where: { id: existingUser.dealer_id } })
+      : null;
+
+    // ── First-time registration: create Dealer org + admin user ──────────────
+    if (!dealerUser) {
+      dealer = await prisma.dealer.upsert({
+        where: { phone },
+        create: { phone, name: 'New Dealer', city: '', onboarding_step: 1 },
+        update: {},
+      });
+      dealerUser = await prisma.dealerUser.create({
+        data: { phone, name: 'Admin', role: ROLES.ADMIN, dealer_id: dealer.id, is_active: true },
+      });
+    }
+
+    const permissions = resolvePermissions(dealerUser.role, dealerUser.permissions as Record<string, boolean> | null);
+    const payload = { dealer_user_id: dealerUser.id, dealer_id: dealerUser.dealer_id, role: dealerUser.role, phone, permissions };
     const token = fastify.jwt.sign(payload, { expiresIn: process.env['JWT_EXPIRES_IN'] ?? '15m' });
     const refreshToken = fastify.jwt.sign(payload, { expiresIn: process.env['JWT_REFRESH_EXPIRES_IN'] ?? '30d' });
 
-    // Store session for audit trail
+    // Store session
     const crypto = await import('crypto');
     const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
-    const expiresAt = new Date(Date.now() + 15 * 60 * 1000); // 15 min
     await prisma.userSession.create({
-      data: {
-        dealer_id: dealer.id,
-        token_hash: tokenHash,
-        ip_address: request.ip,
-        user_agent: request.headers['user-agent'] ?? null,
-        expires_at: expiresAt,
-      },
+      data: { dealer_user_id: dealerUser.id, token_hash: tokenHash, ip_address: request.ip, user_agent: request.headers['user-agent'] ?? null, expires_at: new Date(Date.now() + 15 * 60 * 1000) },
     });
 
-    // Log login activity
-    await prisma.activityLog.create({
-      data: {
-        dealer_id: dealer.id,
-        action: 'auth.login',
-        entity_type: 'dealer',
-        entity_id: dealer.id,
-        ip_address: request.ip,
-        user_agent: request.headers['user-agent'] ?? null,
-      },
-    });
+    // Log login
+    if (dealerUser.dealer_id) {
+      await prisma.activityLog.create({
+        data: { dealer_id: dealerUser.dealer_id, dealer_user_id: dealerUser.id, action: 'auth.login', entity_type: 'dealer_user', entity_id: dealerUser.id, ip_address: request.ip, user_agent: request.headers['user-agent'] ?? null },
+      });
+    }
 
     return {
       token,
       refreshToken,
-      dealer: {
-        id: dealer.id,
-        name: dealer.name,
-        onboarding_completed: dealer.onboarding_completed,
-        onboarding_step: dealer.onboarding_step,
+      user: {
+        id: dealerUser.id,
+        name: dealerUser.name,
+        role: dealerUser.role,
+        dealer_id: dealerUser.dealer_id,
+        permissions,
+        onboarding_completed: dealer?.onboarding_completed ?? false,
+        onboarding_step: dealer?.onboarding_step ?? 1,
       },
     };
   });

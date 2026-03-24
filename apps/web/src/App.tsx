@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import api from './services/api';
 import { ToastProvider } from './components/ui/Toast';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
+import { ROLE_LABELS } from './lib/permissions';
 
 import Onboarding from './pages/Onboarding';
 import CreatePost from './pages/CreatePost';
@@ -23,6 +24,21 @@ const navItems = [
   { to: '/analytics', icon: BarChart2, label: 'Analytics' },
   { to: '/boost', icon: Zap, label: 'Boost' },
 ];
+
+function SidebarUserBadge() {
+  const { user, logout } = useAuth();
+  return (
+    <div className="mt-3 px-3 py-2 bg-gray-50 rounded-lg">
+      <p className="text-xs font-semibold text-gray-800 truncate">{user?.name ?? 'Loading...'}</p>
+      <div className="flex items-center justify-between mt-0.5">
+        <p className="text-xs text-gray-500">{user ? ROLE_LABELS[user.role] : ''}</p>
+        {!import.meta.env.DEV && (
+          <button onClick={logout} className="text-[10px] text-red-400 hover:text-red-600 font-medium">Sign out</button>
+        )}
+      </div>
+    </div>
+  );
+}
 
 function Sidebar({ onClose }: { onClose?: () => void }) {
   return (
@@ -77,10 +93,7 @@ function Sidebar({ onClose }: { onClose?: () => void }) {
           <Settings className="w-4 h-4" />
           Settings
         </NavLink>
-        <div className="mt-3 px-3 py-2 bg-gray-50 rounded-lg">
-          <p className="text-xs font-semibold text-gray-800">Demo Dealer</p>
-          <p className="text-xs text-gray-500">Growth Plan</p>
-        </div>
+        <SidebarUserBadge />
       </div>
     </div>
   );
@@ -302,7 +315,6 @@ function DashboardLayout({ children }: { children: React.ReactNode }) {
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const { token } = useAuth();
-  // Dev bypass: skip auth gate in development so existing workflow is unchanged
   if (import.meta.env.DEV) return <>{children}</>;
   if (!token) return <Navigate to="/onboarding" replace />;
   return <>{children}</>;

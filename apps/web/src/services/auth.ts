@@ -29,7 +29,19 @@ export const authService = {
     api.post<{ success: boolean; message: string }>('/auth/otp/send', { phone }),
 
   verifyOtp: (phone: string, otp: string) =>
-    api.post<{ token: string; refreshToken: string; dealer: { id: string; name: string; onboarding_completed: boolean; onboarding_step: number } }>('/auth/otp/verify', { phone, otp }),
+    api.post<{
+      token: string;
+      refreshToken: string;
+      user: {
+        id: string;
+        name: string;
+        role: string;
+        dealer_id: string | null;
+        permissions: Record<string, boolean>;
+        onboarding_completed?: boolean;
+        onboarding_step?: number;
+      };
+    }>('/auth/otp/verify', { phone, otp }),
 
   refreshToken: (refreshToken: string) =>
     api.post<{ token: string }>('/auth/refresh', { refreshToken }),

@@ -28,7 +28,7 @@ function mapMessage(m: InboxMessage) {
 export default async function inboxRoutes(fastify: FastifyInstance) {
   // GET /v1/inbox — list messages
   fastify.get('/', { preHandler: [fastify.authenticate] }, async (request) => {
-    const dealer_id = (request.user as { dealer_id: string }).dealer_id;
+    const dealer_id = (request.user as { dealer_id: string | null }).dealer_id as string;
     const { platform, tag, isRead, search, page = '1', pageSize = '30' } = request.query as Record<string, string>;
 
     const where: Record<string, unknown> = { dealer_id };
@@ -54,7 +54,7 @@ export default async function inboxRoutes(fastify: FastifyInstance) {
 
   // GET /v1/inbox/:id — single message
   fastify.get('/:id', { preHandler: [fastify.authenticate] }, async (request, reply) => {
-    const dealer_id = (request.user as { dealer_id: string }).dealer_id;
+    const dealer_id = (request.user as { dealer_id: string | null }).dealer_id as string;
     const { id } = request.params as { id: string };
     const message = await prisma.inboxMessage.findFirst({ where: { id, dealer_id } });
     if (!message) return reply.code(404).send({ error: 'Not found' });
@@ -63,7 +63,7 @@ export default async function inboxRoutes(fastify: FastifyInstance) {
 
   // PATCH /v1/inbox/:id — mark read or update tag
   fastify.patch('/:id', { preHandler: [fastify.authenticate] }, async (request, reply) => {
-    const dealer_id = (request.user as { dealer_id: string }).dealer_id;
+    const dealer_id = (request.user as { dealer_id: string | null }).dealer_id as string;
     const { id } = request.params as { id: string };
     const body = request.body as { isRead?: boolean; tag?: string };
 
@@ -83,14 +83,14 @@ export default async function inboxRoutes(fastify: FastifyInstance) {
 
   // POST /v1/inbox/mark-all-read
   fastify.post('/mark-all-read', { preHandler: [fastify.authenticate] }, async (request) => {
-    const dealer_id = (request.user as { dealer_id: string }).dealer_id;
+    const dealer_id = (request.user as { dealer_id: string | null }).dealer_id as string;
     await prisma.inboxMessage.updateMany({ where: { dealer_id, is_read: false }, data: { is_read: true } });
     return { success: true };
   });
 
   // POST /v1/inbox/:id/reply — send reply
   fastify.post('/:id/reply', { preHandler: [fastify.authenticate] }, async (request, reply) => {
-    const dealer_id = (request.user as { dealer_id: string }).dealer_id;
+    const dealer_id = (request.user as { dealer_id: string | null }).dealer_id as string;
     const { id } = request.params as { id: string };
     const { replyText } = request.body as { replyText: string };
     if (!replyText) return reply.code(400).send({ error: 'replyText is required' });
@@ -110,7 +110,7 @@ export default async function inboxRoutes(fastify: FastifyInstance) {
 
   // POST /v1/inbox/:id/suggest-reply — AI-generated reply suggestion
   fastify.post('/:id/suggest-reply', { preHandler: [fastify.authenticate] }, async (request, reply) => {
-    const dealer_id = (request.user as { dealer_id: string }).dealer_id;
+    const dealer_id = (request.user as { dealer_id: string | null }).dealer_id as string;
     const { id } = request.params as { id: string };
     const message = await prisma.inboxMessage.findFirst({ where: { id, dealer_id } });
     if (!message) return reply.code(404).send({ error: 'Not found' });

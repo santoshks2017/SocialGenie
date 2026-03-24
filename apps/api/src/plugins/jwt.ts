@@ -1,15 +1,14 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import fjwt from '@fastify/jwt';
+import type { JwtUser } from '../lib/permissions.js';
+import { resolvePermissions, ROLES } from '../lib/permissions.js';
 
-export interface JwtPayload {
-  dealer_id: string;
-  phone: string;
-}
+export type { JwtUser };
 
 declare module '@fastify/jwt' {
   interface FastifyJWT {
-    payload: JwtPayload;
-    user: JwtPayload;
+    payload: JwtUser;
+    user: JwtUser;
   }
 }
 
@@ -29,20 +28,26 @@ export async function registerJwt(fastify: FastifyInstance) {
   });
 
   fastify.decorate('authenticate', async (request: FastifyRequest, reply: FastifyReply) => {
-    // Development bypass
+    // Development bypass: auto-create or find first admin DealerUser
     if (process.env['NODE_ENV'] !== 'production' && !request.headers.authorization) {
       const { prisma } = await import('../db/prisma.js');
+
+      // Ensure a dealer org exists
       let dealer = await prisma.dealer.findFirst();
       if (!dealer) {
-        dealer = await prisma.dealer.create({
-          data: {
-            name: 'Local Dev Dealer',
-            city: 'Mumbai',
-            phone: '9876543210',
-          }
+        dealer = await prisma.dealer.create({ data: { name: 'Local Dev Dealer', city: 'Mumbai', phone: '9876543210' } });
+      }
+
+      // Ensure a dev DealerUser exists for this dealer
+      let devUser = await prisma.dealerUser.findFirst({ where: { dealer_id: dealer.id } });
+      if (!devUser) {
+        devUser = await prisma.dealerUser.create({
+          data: { phone: '9876543210', name: 'Dev Admin', role: ROLES.ADMIN, dealer_id: dealer.id, is_active: true },
         });
       }
-      request.user = { dealer_id: dealer.id, phone: dealer.phone };
+
+      const permissions = resolvePermissions(devUser.role, devUser.permissions as Record<string, boolean> | null);
+      request.user = { dealer_user_id: devUser.id, dealer_id: dealer.id, role: devUser.role as JwtUser['role'], phone: devUser.phone, permissions };
       return;
     }
 

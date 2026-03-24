@@ -1,19 +1,13 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import { authService } from '../services/auth';
-
-interface DealerInfo {
-  id: string;
-  name: string;
-  onboarding_completed: boolean;
-  onboarding_step: number;
-}
+import type { UserInfo } from '../lib/permissions';
 
 interface AuthContextType {
-  dealer: DealerInfo | null;
+  user: UserInfo | null;
   token: string | null;
   isLoading: boolean;
-  login: (phone: string, otp: string) => Promise<DealerInfo>;
+  login: (phone: string, otp: string) => Promise<UserInfo>;
   logout: () => void;
 }
 
@@ -21,27 +15,23 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('access_token'));
-  const [dealer, setDealer] = useState<DealerInfo | null>(() => {
-    const stored = localStorage.getItem('dealer_info');
+  const [user, setUser] = useState<UserInfo | null>(() => {
+    const stored = localStorage.getItem('user_info');
     return stored ? JSON.parse(stored) : null;
   });
   const [isLoading, setIsLoading] = useState(false);
 
-  // Validate token on mount — if stored token is expired, clear it
+  // Validate/refresh token on mount
   useEffect(() => {
     if (!token) return;
     try {
       const [, payload] = token.split('.');
       const decoded = JSON.parse(atob(payload));
       if (decoded.exp && decoded.exp * 1000 < Date.now()) {
-        // Try to refresh using stored refreshToken
         const refreshToken = localStorage.getItem('refresh_token');
         if (refreshToken) {
           authService.refreshToken(refreshToken)
-            .then((res) => {
-              localStorage.setItem('access_token', res.token);
-              setToken(res.token);
-            })
+            .then((res) => { localStorage.setItem('access_token', res.token); setToken(res.token); })
             .catch(() => logout());
         } else {
           logout();
@@ -52,16 +42,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const login = useCallback(async (phone: string, otp: string): Promise<DealerInfo> => {
+  const login = useCallback(async (phone: string, otp: string): Promise<UserInfo> => {
     setIsLoading(true);
     try {
       const res = await authService.verifyOtp(phone, otp);
+      const userInfo: UserInfo = {
+        id: res.user.id,
+        name: res.user.name,
+        role: res.user.role as UserInfo['role'],
+        dealer_id: res.user.dealer_id,
+        permissions: res.user.permissions as UserInfo['permissions'],
+        onboarding_completed: res.user.onboarding_completed,
+        onboarding_step: res.user.onboarding_step,
+      };
       localStorage.setItem('access_token', res.token);
       localStorage.setItem('refresh_token', res.refreshToken);
-      localStorage.setItem('dealer_info', JSON.stringify(res.dealer));
+      localStorage.setItem('user_info', JSON.stringify(userInfo));
       setToken(res.token);
-      setDealer(res.dealer);
-      return res.dealer;
+      setUser(userInfo);
+      return userInfo;
     } finally {
       setIsLoading(false);
     }
@@ -70,13 +69,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     localStorage.removeItem('access_token');
     localStorage.removeItem('refresh_token');
-    localStorage.removeItem('dealer_info');
+    localStorage.removeItem('user_info');
     setToken(null);
-    setDealer(null);
+    setUser(null);
   }, []);
 
   return (
-    <AuthContext.Provider value={{ dealer, token, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, token, isLoading, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

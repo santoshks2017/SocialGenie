@@ -22,7 +22,7 @@ function mapLead(l: Lead) {
 export default async function leadsRoutes(fastify: FastifyInstance) {
   // GET /v1/leads — list leads
   fastify.get('/', { preHandler: [fastify.authenticate] }, async (request) => {
-    const dealer_id = (request.user as { dealer_id: string }).dealer_id;
+    const dealer_id = (request.user as { dealer_id: string | null }).dealer_id as string;
     const { sourcePlatform, dateFrom, dateTo, page = '1', pageSize = '30' } = request.query as Record<string, string>;
 
     const where: Record<string, unknown> = { dealer_id };
@@ -45,7 +45,7 @@ export default async function leadsRoutes(fastify: FastifyInstance) {
 
   // GET /v1/leads/:id
   fastify.get('/:id', { preHandler: [fastify.authenticate] }, async (request, reply) => {
-    const dealer_id = (request.user as { dealer_id: string }).dealer_id;
+    const dealer_id = (request.user as { dealer_id: string | null }).dealer_id as string;
     const { id } = request.params as { id: string };
     const lead = await prisma.lead.findFirst({ where: { id, dealer_id } });
     if (!lead) return reply.code(404).send({ error: 'Not found' });
@@ -54,7 +54,7 @@ export default async function leadsRoutes(fastify: FastifyInstance) {
 
   // POST /v1/leads — create lead
   fastify.post('/', { preHandler: [fastify.authenticate] }, async (request, reply) => {
-    const dealer_id = (request.user as { dealer_id: string }).dealer_id;
+    const dealer_id = (request.user as { dealer_id: string | null }).dealer_id as string;
     const body = request.body as {
       customerName: string;
       customerPhone?: string;
@@ -89,7 +89,7 @@ export default async function leadsRoutes(fastify: FastifyInstance) {
 
   // PATCH /v1/leads/:id — update lead
   fastify.patch('/:id', { preHandler: [fastify.authenticate] }, async (request, reply) => {
-    const dealer_id = (request.user as { dealer_id: string }).dealer_id;
+    const dealer_id = (request.user as { dealer_id: string | null }).dealer_id as string;
     const { id } = request.params as { id: string };
     const body = request.body as {
       customerName?: string;
@@ -115,7 +115,7 @@ export default async function leadsRoutes(fastify: FastifyInstance) {
 
   // DELETE /v1/leads/:id
   fastify.delete('/:id', { preHandler: [fastify.authenticate] }, async (request, reply) => {
-    const dealer_id = (request.user as { dealer_id: string }).dealer_id;
+    const dealer_id = (request.user as { dealer_id: string | null }).dealer_id as string;
     const { id } = request.params as { id: string };
     const result = await prisma.lead.deleteMany({ where: { id, dealer_id } });
     if (result.count === 0) return reply.code(404).send({ error: 'Not found' });

@@ -39,8 +39,8 @@ export default function Onboarding() {
     setIsLoading(true);
     setError('');
     try {
-      const dealer = await login(phone, otp);
-      if (dealer.onboarding_completed) {
+      const userInfo = await login(phone, otp);
+      if (userInfo.onboarding_completed) {
         navigate('/');
       } else {
         nextStep();

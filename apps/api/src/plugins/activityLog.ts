@@ -31,7 +31,9 @@ export async function registerActivityLog(fastify: FastifyInstance) {
     const match = ACTION_MAP.find((a) => a.method === method && a.pattern.test(url));
     if (!match) return;
 
-    const dealer_id = (request.user as { dealer_id: string }).dealer_id;
+    const user = request.user as { dealer_user_id: string; dealer_id: string | null };
+    const dealer_id = user.dealer_id;
+    if (!dealer_id) return; // owner acting globally — skip per-org log here
 
     // Extract entity_id from URL path (last segment if it looks like a UUID)
     const segments = url.split('/').filter(Boolean);
@@ -43,6 +45,7 @@ export async function registerActivityLog(fastify: FastifyInstance) {
       await prisma.activityLog.create({
         data: {
           dealer_id,
+          dealer_user_id: user.dealer_user_id ?? null,
           action: match.action,
           entity_type: match.entityType ?? null,
           entity_id: entity_id ?? null,

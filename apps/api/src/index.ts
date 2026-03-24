@@ -18,6 +18,7 @@ import inventoryRoutes from './routes/inventory.js';
 import inboxRoutes from './routes/inbox.js';
 import boostRoutes from './routes/boost.js';
 import leadsRoutes from './routes/leads.js';
+import usersRoutes from './routes/users.js';
 
 const fastify = Fastify({ logger: true });
 
@@ -47,6 +48,7 @@ fastify.register(inventoryRoutes, { prefix: '/v1/inventory' });
 fastify.register(inboxRoutes,     { prefix: '/v1/inbox' });
 fastify.register(boostRoutes,     { prefix: '/v1/boost' });
 fastify.register(leadsRoutes,     { prefix: '/v1/leads' });
+fastify.register(usersRoutes,     { prefix: '/v1/users' });
 
 fastify.get('/v1/health', async () => ({
   status: 'ok',

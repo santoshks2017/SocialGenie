@@ -38,8 +38,33 @@ model Dealer {
 
   platform_connections PlatformConnection[]
   posts                Post[]
-  user_sessions        UserSession[]
   activity_logs        ActivityLog[]
+  dealer_users         DealerUser[]
+}
+
+// ─── Role-based user accounts ───────────────────────────────────────────────
+// role: "owner"  → product owner, dealer_id = null, unrestricted global access
+// role: "admin"  → client admin, full access within their dealer org
+// role: "user"   → normal user, limited by the permissions JSON
+model DealerUser {
+  id           String    @id @default(uuid())
+  dealer_id    String?   // null for the global owner account
+  dealer       Dealer?   @relation(fields: [dealer_id], references: [id], onDelete: Cascade)
+  phone        String    @unique
+  email        String?
+  name         String    @default("New User")
+  role         String    @default("user")
+  permissions  Json?     // granular permission overrides for role = "user"
+  invited_by   String?   // DealerUser.id who created this account
+  is_active    Boolean   @default(true)
+  created_at   DateTime  @default(now())
+  updated_at   DateTime  @updatedAt
+
+  sessions      UserSession[]
+  activity_logs ActivityLog[]
+
+  @@index([dealer_id])
+  @@index([phone])
 }
 
 model PlatformConnection {
@@ -109,6 +134,9 @@ model Post {
   inventory_item_ids     String[]
   platforms              String[]
   status                 String   @default("draft")
+  requires_approval      Boolean  @default(false)
+  approved_by            String?  // DealerUser.id
+  approved_at            DateTime?
   scheduled_at           DateTime?
   published_at           DateTime?
   publish_results        Json?
@@ -199,34 +227,37 @@ model Festival {
 }
 
 model UserSession {
-  id             String   @id @default(uuid())
-  dealer_id      String
-  dealer         Dealer   @relation(fields: [dealer_id], references: [id], onDelete: Cascade)
-  token_hash     String   @unique
-  device_info    String?
-  ip_address     String?
-  user_agent     String?
-  is_active      Boolean  @default(true)
-  expires_at     DateTime
-  last_active_at DateTime @default(now())
-  created_at     DateTime @default(now())
+  id              String     @id @default(uuid())
+  dealer_user_id  String
+  dealer_user     DealerUser @relation(fields: [dealer_user_id], references: [id], onDelete: Cascade)
+  token_hash      String     @unique
+  device_info     String?
+  ip_address      String?
+  user_agent      String?
+  is_active       Boolean    @default(true)
+  expires_at      DateTime
+  last_active_at  DateTime   @default(now())
+  created_at      DateTime   @default(now())
 
-  @@index([dealer_id])
+  @@index([dealer_user_id])
 }
 
 model ActivityLog {
-  id          String   @id @default(uuid())
-  dealer_id   String
-  dealer      Dealer   @relation(fields: [dealer_id], references: [id], onDelete: Cascade)
-  action      String
-  entity_type String?
-  entity_id   String?
-  metadata    Json?
-  ip_address  String?
-  user_agent  String?
-  created_at  DateTime @default(now())
+  id              String      @id @default(uuid())
+  dealer_id       String
+  dealer          Dealer      @relation(fields: [dealer_id], references: [id], onDelete: Cascade)
+  dealer_user_id  String?
+  dealer_user     DealerUser? @relation(fields: [dealer_user_id], references: [id], onDelete: SetNull)
+  action          String
+  entity_type     String?
+  entity_id       String?
+  metadata        Json?
+  ip_address      String?
+  user_agent      String?
+  created_at      DateTime    @default(now())
 
   @@index([dealer_id, created_at])
+  @@index([dealer_user_id])
   @@index([action])
 }
 

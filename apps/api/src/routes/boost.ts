@@ -23,7 +23,7 @@ function mapCampaign(c: BoostCampaign) {
 export default async function boostRoutes(fastify: FastifyInstance) {
   // GET /v1/boost — list all campaigns for dealer
   fastify.get('/', { preHandler: [fastify.authenticate] }, async (request) => {
-    const dealer_id = (request.user as { dealer_id: string }).dealer_id;
+    const dealer_id = (request.user as { dealer_id: string | null }).dealer_id as string;
     const { status, page = '1', pageSize = '20' } = request.query as Record<string, string>;
 
     const where: Record<string, unknown> = { dealer_id };
@@ -66,7 +66,7 @@ export default async function boostRoutes(fastify: FastifyInstance) {
 
   // POST /v1/boost — create boost campaign
   fastify.post('/', { preHandler: [fastify.authenticate] }, async (request, reply) => {
-    const dealer_id = (request.user as { dealer_id: string }).dealer_id;
+    const dealer_id = (request.user as { dealer_id: string | null }).dealer_id as string;
     const body = request.body as {
       postId: string;
       dailyBudget: number;
@@ -102,7 +102,7 @@ export default async function boostRoutes(fastify: FastifyInstance) {
 
   // GET /v1/boost/:id — single campaign
   fastify.get('/:id', { preHandler: [fastify.authenticate] }, async (request, reply) => {
-    const dealer_id = (request.user as { dealer_id: string }).dealer_id;
+    const dealer_id = (request.user as { dealer_id: string | null }).dealer_id as string;
     const { id } = request.params as { id: string };
     const campaign = await prisma.boostCampaign.findFirst({ where: { id, dealer_id } });
     if (!campaign) return reply.code(404).send({ error: 'Not found' });
@@ -111,7 +111,7 @@ export default async function boostRoutes(fastify: FastifyInstance) {
 
   // POST /v1/boost/:id/pause — pause campaign (frontend uses POST)
   fastify.post('/:id/pause', { preHandler: [fastify.authenticate] }, async (request, reply) => {
-    const dealer_id = (request.user as { dealer_id: string }).dealer_id;
+    const dealer_id = (request.user as { dealer_id: string | null }).dealer_id as string;
     const { id } = request.params as { id: string };
     const result = await prisma.boostCampaign.updateMany({ where: { id, dealer_id }, data: { status: 'paused' } });
     if (result.count === 0) return reply.code(404).send({ error: 'Not found' });
@@ -122,7 +122,7 @@ export default async function boostRoutes(fastify: FastifyInstance) {
 
   // POST /v1/boost/:id/resume — resume campaign (frontend uses POST)
   fastify.post('/:id/resume', { preHandler: [fastify.authenticate] }, async (request, reply) => {
-    const dealer_id = (request.user as { dealer_id: string }).dealer_id;
+    const dealer_id = (request.user as { dealer_id: string | null }).dealer_id as string;
     const { id } = request.params as { id: string };
     const result = await prisma.boostCampaign.updateMany({ where: { id, dealer_id }, data: { status: 'active' } });
     if (result.count === 0) return reply.code(404).send({ error: 'Not found' });
@@ -133,7 +133,7 @@ export default async function boostRoutes(fastify: FastifyInstance) {
 
   // POST /v1/boost/:id/stop — stop campaign (frontend uses POST)
   fastify.post('/:id/stop', { preHandler: [fastify.authenticate] }, async (request, reply) => {
-    const dealer_id = (request.user as { dealer_id: string }).dealer_id;
+    const dealer_id = (request.user as { dealer_id: string | null }).dealer_id as string;
     const { id } = request.params as { id: string };
     const result = await prisma.boostCampaign.updateMany({ where: { id, dealer_id }, data: { status: 'completed' } });
     if (result.count === 0) return reply.code(404).send({ error: 'Not found' });
@@ -144,7 +144,7 @@ export default async function boostRoutes(fastify: FastifyInstance) {
 
   // GET /v1/boost/:id/metrics — fetch latest performance metrics
   fastify.get('/:id/metrics', { preHandler: [fastify.authenticate] }, async (request, reply) => {
-    const dealer_id = (request.user as { dealer_id: string }).dealer_id;
+    const dealer_id = (request.user as { dealer_id: string | null }).dealer_id as string;
     const { id } = request.params as { id: string };
     const campaign = await prisma.boostCampaign.findFirst({ where: { id, dealer_id } });
     if (!campaign) return reply.code(404).send({ error: 'Not found' });
