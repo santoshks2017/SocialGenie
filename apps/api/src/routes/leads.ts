@@ -1,0 +1,124 @@
+import type { FastifyInstance } from 'fastify';
+import { prisma } from '../db/prisma.js';
+import type { Lead } from '../generated/client/index.js';
+
+function mapLead(l: Lead) {
+  return {
+    id: l.id,
+    dealerId: l.dealer_id,
+    customerName: l.customer_name ?? undefined,
+    customerPhone: l.customer_phone ?? undefined,
+    sourcePlatform: l.source_platform ?? undefined,
+    sourceType: l.source_type ?? undefined,
+    sourcePostId: l.source_post_id ?? undefined,
+    sourceCampaignId: l.source_campaign_id ?? undefined,
+    sourceMessageId: l.source_message_id ?? undefined,
+    vehicleInterest: l.vehicle_interest ?? undefined,
+    notes: l.notes ?? undefined,
+    createdAt: l.created_at.toISOString(),
+  };
+}
+
+export default async function leadsRoutes(fastify: FastifyInstance) {
+  // GET /v1/leads — list leads
+  fastify.get('/', { preHandler: [fastify.authenticate] }, async (request) => {
+    const dealer_id = (request.user as { dealer_id: string }).dealer_id;
+    const { sourcePlatform, dateFrom, dateTo, page = '1', pageSize = '30' } = request.query as Record<string, string>;
+
+    const where: Record<string, unknown> = { dealer_id };
+    if (sourcePlatform) where['source_platform'] = sourcePlatform;
+    if (dateFrom || dateTo) {
+      where['created_at'] = {
+        ...(dateFrom ? { gte: new Date(dateFrom) } : {}),
+        ...(dateTo ? { lte: new Date(dateTo) } : {}),
+      };
+    }
+
+    const skip = (parseInt(page) - 1) * parseInt(pageSize);
+    const [leads, total] = await Promise.all([
+      prisma.lead.findMany({ where, orderBy: { created_at: 'desc' }, skip, take: parseInt(pageSize) }),
+      prisma.lead.count({ where }),
+    ]);
+
+    return { items: leads.map(mapLead), total };
+  });
+
+  // GET /v1/leads/:id
+  fastify.get('/:id', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const dealer_id = (request.user as { dealer_id: string }).dealer_id;
+    const { id } = request.params as { id: string };
+    const lead = await prisma.lead.findFirst({ where: { id, dealer_id } });
+    if (!lead) return reply.code(404).send({ error: 'Not found' });
+    return { item: mapLead(lead) };
+  });
+
+  // POST /v1/leads — create lead
+  fastify.post('/', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const dealer_id = (request.user as { dealer_id: string }).dealer_id;
+    const body = request.body as {
+      customerName: string;
+      customerPhone?: string;
+      sourcePlatform?: string;
+      sourceType?: string;
+      sourcePostId?: string;
+      sourceCampaignId?: string;
+      sourceMessageId?: string;
+      vehicleInterest?: string;
+      notes?: string;
+    };
+
+    if (!body.customerName) return reply.code(400).send({ error: 'customerName is required' });
+
+    const lead = await prisma.lead.create({
+      data: {
+        dealer_id,
+        customer_name: body.customerName,
+        customer_phone: body.customerPhone,
+        source_platform: body.sourcePlatform,
+        source_type: body.sourceType ?? 'inbox',
+        source_post_id: body.sourcePostId,
+        source_campaign_id: body.sourceCampaignId,
+        source_message_id: body.sourceMessageId,
+        vehicle_interest: body.vehicleInterest,
+        notes: body.notes,
+      },
+    });
+
+    return reply.code(201).send({ item: mapLead(lead) });
+  });
+
+  // PATCH /v1/leads/:id — update lead
+  fastify.patch('/:id', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const dealer_id = (request.user as { dealer_id: string }).dealer_id;
+    const { id } = request.params as { id: string };
+    const body = request.body as {
+      customerName?: string;
+      customerPhone?: string;
+      vehicleInterest?: string;
+      notes?: string;
+    };
+
+    const result = await prisma.lead.updateMany({
+      where: { id, dealer_id },
+      data: {
+        ...(body.customerName !== undefined ? { customer_name: body.customerName } : {}),
+        ...(body.customerPhone !== undefined ? { customer_phone: body.customerPhone } : {}),
+        ...(body.vehicleInterest !== undefined ? { vehicle_interest: body.vehicleInterest } : {}),
+        ...(body.notes !== undefined ? { notes: body.notes } : {}),
+      },
+    });
+
+    if (result.count === 0) return reply.code(404).send({ error: 'Not found' });
+    const updated = await prisma.lead.findFirst({ where: { id } });
+    return { item: mapLead(updated!) };
+  });
+
+  // DELETE /v1/leads/:id
+  fastify.delete('/:id', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const dealer_id = (request.user as { dealer_id: string }).dealer_id;
+    const { id } = request.params as { id: string };
+    const result = await prisma.lead.deleteMany({ where: { id, dealer_id } });
+    if (result.count === 0) return reply.code(404).send({ error: 'Not found' });
+    return { success: true };
+  });
+}

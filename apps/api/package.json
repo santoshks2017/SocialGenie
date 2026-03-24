@@ -1,0 +1,35 @@
+{
+  "name": "@cardeko/api",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "@fastify/cors": "^11.2.0",
+    "@fastify/jwt": "^10.0.0",
+    "@fastify/multipart": "^9.4.0",
+    "@fastify/rate-limit": "^10.3.0",
+    "@prisma/client": "^5.22.0",
+    "axios": "^1.13.6",
+    "bullmq": "^5.71.0",
+    "dotenv": "^17.3.1",
+    "fastify": "^5.8.4",
+    "openai": "^6.32.0",
+    "pino": "^10.3.1",
+    "pino-pretty": "^13.1.3"
+  },
+  "devDependencies": {
+    "@types/node": "^25.5.0",
+    "prisma": "^5.22.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
+  }
+}

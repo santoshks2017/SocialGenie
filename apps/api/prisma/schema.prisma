@@ -1,0 +1,247 @@
+generator client {
+  provider   = "prisma-client-js"
+  output     = "../src/generated/client"
+  engineType = "library"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Dealer {
+  id                   String   @id @default(uuid())
+  phone                String   @unique
+  email                String?
+  name                 String
+  city                 String
+  state                String?
+  latitude             Decimal?
+  longitude            Decimal?
+  brands               Json?
+  showroom_type        String[]
+  logo_url             String?
+  primary_color        String?  @default("#1A1A2E")
+  secondary_color      String?  @default("#FFFFFF")
+  contact_phone        String?
+  whatsapp_number      String?
+  plan                 String?  @default("starter")
+  plan_expires_at      DateTime?
+  onboarding_step      Int      @default(1)
+  onboarding_completed Boolean  @default(false)
+  language_preferences String[] @default(["en"])
+  region               String?
+  timezone             String?  @default("Asia/Kolkata")
+  is_active            Boolean  @default(true)
+  created_at           DateTime @default(now())
+  updated_at           DateTime @updatedAt
+
+  platform_connections PlatformConnection[]
+  posts                Post[]
+  user_sessions        UserSession[]
+  activity_logs        ActivityLog[]
+}
+
+model PlatformConnection {
+  id                    String   @id @default(uuid())
+  dealer_id             String
+  dealer                Dealer   @relation(fields: [dealer_id], references: [id])
+  platform              String
+  platform_account_id   String
+  platform_account_name String?
+  access_token          String
+  refresh_token         String?
+  token_expires_at      DateTime?
+  ad_account_id         String?
+  is_connected          Boolean  @default(true)
+  last_sync_at          DateTime?
+  created_at            DateTime @default(now())
+  updated_at            DateTime @updatedAt
+
+  @@unique([dealer_id, platform])
+}
+
+model Template {
+  id                String   @id @default(uuid())
+  name              String
+  category          String
+  spec              Json
+  thumbnail_url     String?
+  platforms         String[]
+  regional_variants String[]
+  festival_id       String?
+  is_active         Boolean  @default(true)
+  usage_count       Int      @default(0)
+  created_at        DateTime @default(now())
+  updated_at        DateTime @updatedAt
+  
+  posts             Post[]
+}
+
+model Prompt {
+  id             String   @id @default(uuid())
+  category       String
+  text_en        String
+  text_hi        String?
+  text_regional  Json?
+  is_active      Boolean  @default(true)
+  usage_count    Int      @default(0)
+  sort_order     Int      @default(0)
+  created_at     DateTime @default(now())
+  updated_at     DateTime @updatedAt
+
+  posts          Post[]
+}
+
+model Post {
+  id                     String   @id @default(uuid())
+  dealer_id              String
+  dealer                 Dealer   @relation(fields: [dealer_id], references: [id])
+  prompt_text            String
+  prompt_id              String?
+  prompt                 Prompt?  @relation(fields: [prompt_id], references: [id])
+  selected_variant_index Int?
+  caption_text           String?
+  caption_hashtags       String[]
+  creative_urls          Json?
+  template_id            String?
+  template               Template? @relation(fields: [template_id], references: [id])
+  inventory_item_ids     String[]
+  platforms              String[]
+  status                 String   @default("draft")
+  scheduled_at           DateTime?
+  published_at           DateTime?
+  publish_results        Json?
+  metrics                Json?
+  metrics_last_fetched   DateTime?
+  created_at             DateTime @default(now())
+  updated_at             DateTime @updatedAt
+}
+
+model BoostCampaign {
+  id                   String   @id @default(uuid())
+  dealer_id            String
+  post_id              String
+  meta_campaign_id     String?
+  meta_adset_id        String?
+  meta_ad_id           String?
+  daily_budget         Int
+  duration_days        Int
+  start_date           DateTime?
+  end_date             DateTime?
+  targeting_spec       Json?
+  status               String   @default("draft")
+  total_spent          Int      @default(0)
+  metrics              Json?
+  metrics_last_fetched DateTime?
+  created_at           DateTime @default(now())
+  updated_at           DateTime @updatedAt
+}
+
+model InboxMessage {
+  id                   String   @id @default(uuid())
+  dealer_id            String
+  platform             String
+  message_type         String
+  platform_message_id  String   @unique
+  post_id              String?
+  customer_name        String
+  customer_avatar_url  String?
+  customer_platform_id String?
+  message_text         String
+  sentiment            String?
+  tag                  String?
+  ai_suggested_reply   String?
+  reply_text           String?
+  replied_at           DateTime?
+  is_read              Boolean  @default(false)
+  requires_approval    Boolean  @default(false)
+  received_at          DateTime
+  created_at           DateTime @default(now())
+  updated_at           DateTime @updatedAt
+}
+
+model InventoryItem {
+  id            String   @id @default(uuid())
+  dealer_id     String
+  make          String
+  model         String
+  variant       String?
+  year          Int
+  price         Int
+  condition     String
+  color         String?
+  fuel_type     String?
+  transmission  String?
+  mileage_km    Int?
+  stock_count   Int      @default(1)
+  image_urls    String[]
+  status        String   @default("in_stock")
+  source        String   @default("manual")
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+}
+
+model Festival {
+  id                       String   @id @default(uuid())
+  name_en                  String
+  name_hi                  String?
+  name_regional            Json?
+  date                     DateTime
+  regions                  String[]
+  category                 String?
+  campaign_type            String?
+  template_ids             String[]
+  auto_suggest_days_before Int      @default(14)
+  is_active                Boolean  @default(true)
+  created_at               DateTime @default(now())
+  updated_at               DateTime @updatedAt
+}
+
+model UserSession {
+  id             String   @id @default(uuid())
+  dealer_id      String
+  dealer         Dealer   @relation(fields: [dealer_id], references: [id], onDelete: Cascade)
+  token_hash     String   @unique
+  device_info    String?
+  ip_address     String?
+  user_agent     String?
+  is_active      Boolean  @default(true)
+  expires_at     DateTime
+  last_active_at DateTime @default(now())
+  created_at     DateTime @default(now())
+
+  @@index([dealer_id])
+}
+
+model ActivityLog {
+  id          String   @id @default(uuid())
+  dealer_id   String
+  dealer      Dealer   @relation(fields: [dealer_id], references: [id], onDelete: Cascade)
+  action      String
+  entity_type String?
+  entity_id   String?
+  metadata    Json?
+  ip_address  String?
+  user_agent  String?
+  created_at  DateTime @default(now())
+
+  @@index([dealer_id, created_at])
+  @@index([action])
+}
+
+model Lead {
+  id                 String   @id @default(uuid())
+  dealer_id          String
+  customer_name      String?
+  customer_phone     String?
+  source_platform    String?
+  source_type        String?
+  source_post_id     String?
+  source_campaign_id String?
+  source_message_id  String?
+  vehicle_interest   String?
+  notes              String?
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
+}

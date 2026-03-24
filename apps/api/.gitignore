@@ -1,0 +1,11 @@
+node_modules/
+.env
+
+# Prisma generated client
+src/generated/
+
+# TypeScript build output (project uses tsx for dev, tsc for prod build)
+**/*.js
+**/*.js.map
+**/*.d.ts
+**/*.d.ts.map

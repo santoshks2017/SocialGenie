@@ -1,0 +1,201 @@
+import OpenAI from 'openai';
+
+let client: OpenAI | null = null;
+
+function getClient(): OpenAI {
+  if (!client) {
+    const apiKey = process.env['OPENAI_API_KEY'];
+    if (!apiKey) throw new Error('OPENAI_API_KEY is not set');
+    client = new OpenAI({ apiKey });
+  }
+  return client;
+}
+
+export interface DealerContext {
+  name: string;
+  city: string;
+  brands: string[];
+  phone: string;
+  whatsapp: string;
+  language_preferences: string[];
+}
+
+export interface InventoryContext {
+  make?: string;
+  model?: string;
+  variant?: string;
+  price?: number;
+  features?: string[];
+  stock_count?: number;
+}
+
+export interface CaptionVariant {
+  caption_text: string;
+  hashtags: string[];
+  suggested_emoji: string[];
+  platform_notes: string;
+  style: 'punchy' | 'detailed' | 'emotional';
+}
+
+export interface GeneratedCaptions {
+  variants: [CaptionVariant, CaptionVariant, CaptionVariant];
+  hindi_variants?: [string, string, string];
+}
+
+const SYSTEM_PROMPT = `You are a social media marketing expert for Indian automobile dealerships.
+You write captions that drive footfall, enquiries, and leads.
+
+RULES:
+1. Never invent or approximate prices. If no price provided, omit pricing entirely.
+2. Never invent vehicle specifications. Only use provided data.
+3. Include a clear call-to-action: visit showroom, call now, WhatsApp us.
+4. Use the dealer's city name for local relevance.
+5. Keep tone professional but warm — trusted local business, not a meme page.
+6. If festival context is provided, weave it naturally — do not force it.
+7. Generate exactly 3 variants:
+   - "punchy": Short (under 60 words), bold, urgent. Best for Instagram.
+   - "detailed": Informative (100-150 words), lists key details, EMI/price if available.
+   - "emotional": Aspirational (80-120 words), connects the car to lifestyle/family/dreams.
+
+OUTPUT FORMAT (valid JSON only, no markdown fences):
+{
+  "variants": [
+    { "caption_text": "...", "hashtags": ["#tag1",...], "suggested_emoji": ["🚗"], "platform_notes": "...", "style": "punchy" },
+    { "caption_text": "...", "hashtags": ["#tag1",...], "suggested_emoji": ["✨"], "platform_notes": "...", "style": "detailed" },
+    { "caption_text": "...", "hashtags": ["#tag1",...], "suggested_emoji": ["❤️"], "platform_notes": "...", "style": "emotional" }
+  ]
+}`;
+
+export async function generateCaptions(
+  prompt: string,
+  dealer: DealerContext,
+  inventory?: InventoryContext,
+  festivalContext?: string,
+): Promise<GeneratedCaptions> {
+  const openai = getClient();
+
+  const vehicleBlock = inventory
+    ? `VEHICLE CONTEXT:
+- Make/Model: ${inventory.make ?? ''} ${inventory.model ?? ''} ${inventory.variant ?? ''}
+- Price: ${inventory.price ? `₹${(inventory.price / 100000).toFixed(2)} Lakhs (exact — do not approximate)` : 'not provided — omit pricing'}
+- Key Features: ${inventory.features?.join(', ') ?? 'not provided'}
+- Stock: ${inventory.stock_count ?? 'available'} units`
+    : 'VEHICLE CONTEXT: Not provided — use prompt details only.';
+
+  const userMessage = `DEALER CONTEXT:
+- Name: ${dealer.name}
+- City: ${dealer.city}
+- Brand(s): ${dealer.brands.join(', ')}
+- Phone: ${dealer.phone}
+- WhatsApp: ${dealer.whatsapp}
+
+${vehicleBlock}
+${festivalContext ? `\nFESTIVAL CONTEXT: ${festivalContext}` : ''}
+
+DEALER PROMPT: "${prompt}"
+
+Generate 3 caption variants as specified.`;
+
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4o',
+    messages: [
+      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'user', content: userMessage },
+    ],
+    temperature: 0.8,
+    max_tokens: 1500,
+    response_format: { type: 'json_object' },
+  });
+
+  const content = response.choices[0]?.message?.content;
+  if (!content) throw new Error('Empty response from OpenAI');
+
+  const parsed = JSON.parse(content) as { variants: [CaptionVariant, CaptionVariant, CaptionVariant] };
+
+  // Generate Hindi variants if dealer has Hindi preference
+  let hindi_variants: [string, string, string] | undefined;
+  if (dealer.language_preferences.includes('hi')) {
+    hindi_variants = await generateHindiVariants(openai, parsed.variants, dealer);
+  }
+
+  return hindi_variants
+    ? { variants: parsed.variants, hindi_variants }
+    : { variants: parsed.variants };
+}
+
+async function generateHindiVariants(
+  openai: OpenAI,
+  variants: CaptionVariant[],
+  dealer: DealerContext,
+): Promise<[string, string, string]> {
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4o',
+    messages: [
+      {
+        role: 'system',
+        content: `You are a Hindi copywriter for Indian automobile dealerships in ${dealer.city}.
+Generate captions NATIVELY in Hindi — do NOT translate from English.
+Use idioms, phrasing, and expressions natural to Hindi-speaking automobile buyers.
+Keep the same intent and call-to-action as the English version.
+Return JSON: { "hi_0": "...", "hi_1": "...", "hi_2": "..." }`,
+      },
+      {
+        role: 'user',
+        content: `Create Hindi versions of these 3 captions for ${dealer.name}, ${dealer.city}:
+0: ${variants[0]?.caption_text ?? ''}
+1: ${variants[1]?.caption_text ?? ''}
+2: ${variants[2]?.caption_text ?? ''}`,
+      },
+    ],
+    temperature: 0.7,
+    max_tokens: 1000,
+    response_format: { type: 'json_object' },
+  });
+
+  const content = response.choices[0]?.message?.content;
+  if (!content) return ['', '', ''];
+  const parsed = JSON.parse(content) as { hi_0: string; hi_1: string; hi_2: string };
+  return [parsed.hi_0 ?? '', parsed.hi_1 ?? '', parsed.hi_2 ?? ''];
+}
+
+export async function generateInboxReply(
+  messageText: string,
+  sentiment: string,
+  dealer: DealerContext,
+  messageType: 'comment' | 'dm' | 'review',
+  inventory?: { make: string; model: string; price?: number }[],
+): Promise<string> {
+  const openai = getClient();
+
+  const maxWords = messageType === 'comment' ? 80 : 180;
+
+  const response = await openai.chat.completions.create({
+    model: 'gpt-4o',
+    messages: [
+      {
+        role: 'system',
+        content: `You are a helpful customer service assistant for ${dealer.name}, an automobile dealership in ${dealer.city}.
+
+RULES:
+1. Be polite, professional, and helpful.
+2. If the customer asks about a specific vehicle and inventory data is provided, include basic info.
+3. If the customer is complaining, acknowledge their concern sincerely and offer a callback from the manager.
+4. Never make promises about pricing or discounts unless provided.
+5. Always include a CTA: visit showroom, call ${dealer.phone}, or WhatsApp ${dealer.whatsapp}.
+6. Keep the response under ${maxWords} words.
+7. Match the language of the customer's message (Hindi reply for Hindi message, etc.).
+8. SENTIMENT: ${sentiment}. For negative sentiment, lead with a sincere apology.
+
+Return only the reply text — no JSON, no labels.`,
+      },
+      {
+        role: 'user',
+        content: `Customer ${messageType}: "${messageText}"${inventory && inventory.length > 0 ? `\n\nAvailable inventory context: ${inventory.map((i) => `${i.make} ${i.model}${i.price ? ` at ₹${(i.price / 100000).toFixed(2)}L` : ''}`).join(', ')}` : ''}`,
+      },
+    ],
+    temperature: 0.6,
+    max_tokens: 300,
+  });
+
+  return response.choices[0]?.message?.content?.trim() ?? '';
+}
