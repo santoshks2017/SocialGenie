@@ -3,6 +3,7 @@ import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import multipart from '@fastify/multipart';
+import staticPlugin from '@fastify/static';
 
 import { registerJwt } from './plugins/jwt.js';
 import { registerActivityLog } from './plugins/activityLog.js';
@@ -19,6 +20,8 @@ import inboxRoutes from './routes/inbox.js';
 import boostRoutes from './routes/boost.js';
 import leadsRoutes from './routes/leads.js';
 import usersRoutes from './routes/users.js';
+import uploadRoutes from './routes/upload.js';
+import { UPLOADS_ROOT } from './routes/upload.js';
 
 const fastify = Fastify({ logger: true });
 
@@ -33,7 +36,14 @@ await fastify.register(rateLimit, {
   keyGenerator: (req) => req.ip,
 });
 
-await fastify.register(multipart, { limits: { fileSize: 10 * 1024 * 1024 } }); // 10 MB
+await fastify.register(multipart, { limits: { fileSize: 50 * 1024 * 1024 } }); // 50 MB (images + videos)
+
+// Serve uploaded files as static assets at /uploads/...
+await fastify.register(staticPlugin, {
+  root: UPLOADS_ROOT,
+  prefix: '/uploads/',
+  decorateReply: false,
+});
 
 await registerJwt(fastify);
 await registerActivityLog(fastify);
@@ -49,6 +59,7 @@ fastify.register(inboxRoutes,     { prefix: '/v1/inbox' });
 fastify.register(boostRoutes,     { prefix: '/v1/boost' });
 fastify.register(leadsRoutes,     { prefix: '/v1/leads' });
 fastify.register(usersRoutes,     { prefix: '/v1/users' });
+fastify.register(uploadRoutes,    { prefix: '/v1/upload' });
 
 fastify.get('/v1/health', async () => ({
   status: 'ok',

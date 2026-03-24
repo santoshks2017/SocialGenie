@@ -54,15 +54,27 @@ export interface Post {
 export const creativeService = {
   getPrompts: (category?: string) =>
     api.get<{ data: Prompt[] }>('/creatives/prompts', { category }),
-  
-  generateCaptions: (prompt: string, platforms: string[]) =>
-    api.post<AIGenerationResponse>('/creatives/generate', { prompt, platforms }),
-  
+
+  generateCaptions: (prompt: string, platforms: string[], imageId?: string) =>
+    api.post<AIGenerationResponse>('/creatives/generate', { prompt, platforms, image_id: imageId }),
+
   getTemplates: (category?: string) =>
     api.get<{ items: unknown[] }>('/creatives/templates', { category }),
-  
+
   renderCreative: (templateId: string, data: Record<string, unknown>) =>
     api.post<{ urls: Record<string, string> }>('/creatives/render', { templateId, data }),
+
+  uploadImage: (file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return api.upload<{ id: string; url: string }>('/upload/image', form);
+  },
+
+  uploadVideo: (file: File) => {
+    const form = new FormData();
+    form.append('file', file);
+    return api.upload<{ id: string; url: string }>('/upload/video', form);
+  },
 };
 
 export const postService = {

@@ -1,11 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { creativeService, postService } from '../services/creative';
 import type { AIGenerationResponse } from '../services/creative';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { useToast } from '../components/ui/Toast';
-import { MapPin, Zap, Download, RefreshCw, Edit3, Check } from 'lucide-react';
+import { MapPin, Zap, Download, RefreshCw, Edit3, Check, ImagePlus, Video, X } from 'lucide-react';
 
 // Platform icon components (lucide-react doesn't include brand icons)
 function FbIcon({ className }: { className?: string }) {
@@ -113,6 +113,13 @@ export default function CreatePost() {
   const [published, setPublished] = useState(false);
   const [promptChips, setPromptChips] = useState(PROMPT_CHIPS);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [uploadedImageId, setUploadedImageId] = useState<string | null>(null);
+  const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
+  const [uploadedVideoId, setUploadedVideoId] = useState<string | null>(null);
+  const [uploadedVideoName, setUploadedVideoName] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const imageInputRef = useRef<HTMLInputElement>(null);
+  const videoInputRef = useRef<HTMLInputElement>(null);
   const { addToast } = useToast();
 
   useEffect(() => {
@@ -133,13 +140,56 @@ export default function CreatePost() {
 
   const handleChipClick = (p: string) => setPrompt(p);
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploading(true);
+    try {
+      const res = await creativeService.uploadImage(file);
+      setUploadedImageId(res.id);
+      setUploadedImageUrl(res.url);
+      setUploadedVideoId(null);
+      setUploadedVideoName(null);
+    } catch {
+      addToast({ type: 'error', title: 'Upload failed', message: 'Image upload failed. Try again.' });
+    } finally {
+      setIsUploading(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIsUploading(true);
+    try {
+      const res = await creativeService.uploadVideo(file);
+      setUploadedVideoId(res.id);
+      setUploadedVideoName(file.name);
+      setUploadedImageId(null);
+      setUploadedImageUrl(null);
+    } catch {
+      addToast({ type: 'error', title: 'Upload failed', message: 'Video upload failed. Try again.' });
+    } finally {
+      setIsUploading(false);
+      e.target.value = '';
+    }
+  };
+
+  const clearMedia = () => {
+    setUploadedImageId(null);
+    setUploadedImageUrl(null);
+    setUploadedVideoId(null);
+    setUploadedVideoName(null);
+  };
+
   const handleGenerate = async () => {
     if (!prompt.trim()) return;
     setIsGenerating(true);
     setVariants(null);
     setPublished(false);
     try {
-      const res = await creativeService.generateCaptions(prompt, selectedPlatforms);
+      const res = await creativeService.generateCaptions(prompt, selectedPlatforms, uploadedImageId ?? undefined);
       setVariants(res);
       setSelectedVariant(0);
       setCaption(res.captions[0]?.caption_text || '');
@@ -230,6 +280,57 @@ export default function CreatePost() {
       <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* LEFT: Prompt & Config */}
         <div className="lg:col-span-2 space-y-4">
+          {/* Media upload */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm text-gray-600">Car Photo / Video <span className="text-gray-400 font-normal">(optional — enables branded creatives)</span></CardTitle>
+            </CardHeader>
+            <CardContent>
+              <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+              <input ref={videoInputRef} type="file" accept="video/*" className="hidden" onChange={handleVideoUpload} />
+
+              {uploadedImageUrl ? (
+                <div className="relative rounded-lg overflow-hidden border border-gray-200">
+                  <img src={uploadedImageUrl} alt="Uploaded" className="w-full h-32 object-cover" />
+                  <button onClick={clearMedia} className="absolute top-1.5 right-1.5 w-6 h-6 bg-black/50 hover:bg-black/70 rounded-full flex items-center justify-center transition-colors">
+                    <X className="w-3.5 h-3.5 text-white" />
+                  </button>
+                  <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 p-2">
+                    <p className="text-white text-xs font-medium">Photo ready — branded creatives will be generated</p>
+                  </div>
+                </div>
+              ) : uploadedVideoName ? (
+                <div className="flex items-center gap-3 p-3 rounded-lg border border-gray-200 bg-gray-50">
+                  <Video className="w-8 h-8 text-blue-500 flex-shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-700 truncate">{uploadedVideoName}</p>
+                    <p className="text-xs text-gray-400">Video uploaded — caption will be generated</p>
+                  </div>
+                  <button onClick={clearMedia} className="text-gray-400 hover:text-red-500 transition-colors"><X className="w-4 h-4" /></button>
+                </div>
+              ) : (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => imageInputRef.current?.click()}
+                    disabled={isUploading}
+                    className="flex-1 flex flex-col items-center gap-1.5 p-4 rounded-lg border-2 border-dashed border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors disabled:opacity-50"
+                  >
+                    <ImagePlus className="w-5 h-5 text-gray-400" />
+                    <span className="text-xs text-gray-500">{isUploading ? 'Uploading...' : 'Add Photo'}</span>
+                  </button>
+                  <button
+                    onClick={() => videoInputRef.current?.click()}
+                    disabled={isUploading}
+                    className="flex-1 flex flex-col items-center gap-1.5 p-4 rounded-lg border-2 border-dashed border-gray-200 hover:border-blue-300 hover:bg-blue-50 transition-colors disabled:opacity-50"
+                  >
+                    <Video className="w-5 h-5 text-gray-400" />
+                    <span className="text-xs text-gray-500">{isUploading ? 'Uploading...' : 'Add Video'}</span>
+                  </button>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Prompt input */}
           <Card>
             <CardHeader className="pb-3">
@@ -363,13 +464,16 @@ export default function CreatePost() {
                         selectedVariant === i ? 'border-blue-500 shadow-lg shadow-blue-100' : 'border-transparent hover:border-gray-200'
                       }`}
                     >
-                      {/* Creative preview */}
-                      <div className={`aspect-square bg-gradient-to-br ${['from-blue-900 to-blue-700', 'from-gray-900 to-gray-700', 'from-orange-600 to-red-600'][i % 3]} flex flex-col items-center justify-center p-3`}>
-                        <div className="w-12 h-8 bg-white/20 rounded mb-2" />
-                        <div className="w-16 h-2 bg-white/60 rounded mb-1" />
-                        <div className="w-10 h-2 bg-white/40 rounded" />
-                        <div className="absolute bottom-2 left-2 w-6 h-2 bg-white/30 rounded" />
-                      </div>
+                      {/* Creative preview — real image or gradient placeholder */}
+                      {v.thumbnail_url ? (
+                        <img src={v.thumbnail_url} alt={v.template_name} className="w-full aspect-square object-cover" />
+                      ) : (
+                        <div className={`aspect-square bg-gradient-to-br ${['from-blue-900 to-blue-700', 'from-gray-900 to-gray-700', 'from-orange-600 to-red-600'][i % 3]} flex flex-col items-center justify-center p-3`}>
+                          <div className="w-12 h-8 bg-white/20 rounded mb-2" />
+                          <div className="w-16 h-2 bg-white/60 rounded mb-1" />
+                          <div className="w-10 h-2 bg-white/40 rounded" />
+                        </div>
+                      )}
                       <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent p-2">
                         <p className="text-white text-[10px] font-medium">{v.template_name}</p>
                       </div>
