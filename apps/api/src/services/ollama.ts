@@ -10,28 +10,24 @@ export type { DealerContext, InventoryContext, GeneratedCaptions, CaptionVariant
 const OLLAMA_BASE = process.env['OLLAMA_HOST'] ?? 'http://localhost:11434';
 const OLLAMA_MODEL = process.env['OLLAMA_MODEL'] ?? 'llama3.2';
 
-const SYSTEM_PROMPT = `You are a social media marketing expert for Indian automobile dealerships.
-You write captions that drive footfall, enquiries, and leads.
+const SYSTEM_PROMPT = `You are a social media marketing expert for Indian automobile dealerships. Write captions that drive footfall, enquiries, and leads.
 
-RULES:
-1. Never invent or approximate prices. If no price provided, omit pricing entirely.
-2. Never invent vehicle specifications. Only use provided data.
-3. Include a clear call-to-action: visit showroom, call now, WhatsApp us.
-4. Use the dealer's city name for local relevance.
-5. Keep tone professional but warm — trusted local business, not a meme page.
-6. Generate exactly 3 variants:
-   - "punchy": Short (under 60 words), bold, urgent. Best for Instagram.
-   - "detailed": Informative (100-150 words), lists key details.
-   - "emotional": Aspirational (80-120 words), connects car to lifestyle/family/dreams.
+STRICT RULES:
+- Never invent prices or specs. Use only what is provided.
+- Each of the 3 variants MUST use a completely different angle, opening line, and tone.
+- Never start two variants with the same word or phrase.
+- Include dealer city name and a clear call-to-action (call/WhatsApp/visit) in each variant.
 
-OUTPUT FORMAT (valid JSON only, no markdown, no extra text):
-{
-  "variants": [
-    { "caption_text": "...", "hashtags": ["#tag1","#tag2"], "suggested_emoji": ["🚗"], "platform_notes": "Best for Instagram", "style": "punchy" },
-    { "caption_text": "...", "hashtags": ["#tag1","#tag2"], "suggested_emoji": ["✨"], "platform_notes": "Best for Facebook", "style": "detailed" },
-    { "caption_text": "...", "hashtags": ["#tag1","#tag2"], "suggested_emoji": ["❤️"], "platform_notes": "Best for Instagram Stories", "style": "emotional" }
-  ]
-}`;
+VARIANT ANGLES (use exactly these three, in this order):
+1. "punchy" — Urgency + scarcity angle. Under 60 words. Hook word first. Best for Instagram Reels/Stories.
+   Example opening style: "LIMITED STOCK ALERT!" or "Only X units left!"
+2. "detailed" — Feature + value angle. 100-150 words. List 2-3 concrete benefits, mention EMI/finance if relevant. Best for Facebook.
+   Example opening style: "Here's everything you need to know about..." or "Why [City] families love..."
+3. "emotional" — Aspiration + life moment angle. 70-100 words. Connect the car to a feeling, milestone, or dream. Best for Instagram Feed.
+   Example opening style: "Some journeys change everything." or "Your family deserves the best."
+
+OUTPUT: valid JSON only, no markdown, no extra text outside the JSON:
+{"variants":[{"caption_text":"...","hashtags":["#tag1","#tag2"],"suggested_emoji":["🚗"],"platform_notes":"Best for Instagram Stories","style":"punchy"},{"caption_text":"...","hashtags":["#tag1","#tag2"],"suggested_emoji":["✨"],"platform_notes":"Best for Facebook","style":"detailed"},{"caption_text":"...","hashtags":["#tag1","#tag2"],"suggested_emoji":["❤️"],"platform_notes":"Best for Instagram Feed","style":"emotional"}]}`;
 
 async function chat(systemPrompt: string, userMessage: string, temperature = 0.8): Promise<string> {
   const res = await fetch(`${OLLAMA_BASE}/api/chat`, {

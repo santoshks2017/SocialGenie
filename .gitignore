@@ -62,3 +62,12 @@ apps/web/.vite/
 
 # TypeScript
 *.tsbuildinfo
+
+# Uploaded & generated media files
+apps/uploads/
+
+# LibreOffice/Office lock files
+.~lock.*
+
+# Spreadsheets (domain research artifacts)
+*.xlsx

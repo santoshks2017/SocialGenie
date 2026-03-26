@@ -8,6 +8,8 @@ export interface RenderInput {
   dealerName: string;
   city: string;
   phone: string;
+  whatsapp?: string;
+  address?: string;       // e.g. "Showroom Road, City, State"
   primaryColor: string;   // hex e.g. '#1877F2'
   price?: number;         // in smallest currency unit (paise)
   outputDir: string;
@@ -57,24 +59,48 @@ function fmtPrice(paise: number): string {
   return `&#x20B9;${(paise / 100000).toFixed(2)} L`;
 }
 
+// ─── Dealer Panel SVG (shared across templates) ───────────────────────────────
+// A solid branded strip at bottom: dealer name, phone, WhatsApp, city/address.
+// panelY = top of the 120px panel, width = 1080.
+function dealerPanelSvg(input: RenderInput, panelY: number): string {
+  const { dealerName, city, phone, whatsapp, address, primaryColor } = input;
+  const [r, g, b] = hexRgb(primaryColor);
+  // Darken primary for panel bg
+  const bgR = Math.max(0, r - 40), bgG = Math.max(0, g - 40), bgB = Math.max(0, b - 40);
+  const contactLine = [
+    phone ? `&#128222; ${x(phone)}` : '',
+    whatsapp && whatsapp !== phone ? `&#x1F4AC; ${x(whatsapp)}` : '',
+  ].filter(Boolean).join('   ');
+  const locationLine = address ? x(address) : `${x(city)}`;
+
+  return `
+  <!-- Dealer Panel -->
+  <rect x="0" y="${panelY}" width="1080" height="120" fill="rgb(${bgR},${bgG},${bgB})"/>
+  <rect x="0" y="${panelY}" width="6" height="120" fill="white" opacity="0.4"/>
+  <text x="28" y="${panelY + 42}" font-family="Helvetica Neue,Arial,sans-serif" font-size="26"
+    font-weight="700" fill="white">${x(dealerName)}</text>
+  <text x="28" y="${panelY + 72}" font-family="Helvetica Neue,Arial,sans-serif" font-size="19"
+    fill="rgba(255,255,255,0.82)">${contactLine}</text>
+  <text x="28" y="${panelY + 98}" font-family="Helvetica Neue,Arial,sans-serif" font-size="17"
+    fill="rgba(255,255,255,0.62)">${locationLine}</text>`;
+}
+
 // ─── Template 1: Bold Banner ──────────────────────────────────────────────────
-// Car image fills 1080x1080. Dark gradient from mid → bottom. Text on bottom.
+// Car image fills 1080x960. Dark gradient mid→bottom. Headline over image. Dealer panel below.
 function boldBannerOverlay(input: RenderInput): Buffer {
-  const { headline, dealerName, city, phone, primaryColor, price } = input;
+  const { headline, primaryColor, price } = input;
   const lines = wrapText(headline, 27, 2);
   const hasPrice = price != null && price > 0;
+  const PANEL_Y = 960;
 
-  // Positions from bottom upward
-  const cityY = 1052;
-  const dealerY = 1008;
-  const priceY = hasPrice ? 955 : null;
-  const h2Y = hasPrice ? 885 : (lines.length > 1 ? 930 : 950);
-  const h1Y = h2Y - (lines.length > 1 ? 56 : 0);
-  const headlineStartY = lines.length > 1 ? h1Y : h2Y;
+  // Headline + price sit in bottom portion of the image area (above panel)
+  const priceY = hasPrice ? PANEL_Y - 20 : null;
+  const h2Y = hasPrice ? PANEL_Y - 74 : (lines.length > 1 ? PANEL_Y - 56 : PANEL_Y - 74);
+  const headlineStartY = lines.length > 1 ? h2Y - 56 : h2Y;
 
   const priceEl = priceY
-    ? `<rect x="54" y="${priceY - 42}" width="288" height="52" rx="26" fill="${x(primaryColor)}"/>
-       <text x="198" y="${priceY - 10}" font-family="Helvetica Neue,Arial,sans-serif" font-size="24"
+    ? `<rect x="54" y="${priceY - 40}" width="288" height="48" rx="24" fill="${x(primaryColor)}"/>
+       <text x="198" y="${priceY - 10}" font-family="Helvetica Neue,Arial,sans-serif" font-size="22"
          font-weight="700" fill="white" text-anchor="middle">${fmtPrice(price!)}</text>`
     : '';
 
@@ -87,34 +113,30 @@ function boldBannerOverlay(input: RenderInput): Buffer {
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1080">
   <defs>
     <linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="38%" stop-color="#000" stop-opacity="0"/>
-      <stop offset="100%" stop-color="#000" stop-opacity="0.88"/>
+      <stop offset="35%" stop-color="#000" stop-opacity="0"/>
+      <stop offset="95%" stop-color="#000" stop-opacity="0.82"/>
     </linearGradient>
   </defs>
-  <rect width="1080" height="1080" fill="url(#g)"/>
-  <rect y="1068" width="1080" height="12" fill="${x(primaryColor)}"/>
+  <rect width="1080" height="${PANEL_Y}" fill="url(#g)"/>
   ${headlineEls}
   ${priceEl}
-  <text x="54" y="${dealerY}" font-family="Helvetica Neue,Arial,sans-serif" font-size="26"
-    font-weight="600" fill="rgba(255,255,255,0.95)">${x(dealerName)}</text>
-  <text x="54" y="${cityY}" font-family="Helvetica Neue,Arial,sans-serif" font-size="20"
-    fill="rgba(255,255,255,0.68)">${x(city)} &#183; ${x(phone)}</text>
+  ${dealerPanelSvg(input, PANEL_Y)}
 </svg>`;
 
   return Buffer.from(svg);
 }
 
 // ─── Template 2: Minimal Showcase ─────────────────────────────────────────────
-// Car image top 580px. White card bottom 500px with branding and text.
+// Car image top 580px. White card middle with headline/price. Dealer panel at bottom.
 function minimalShowcaseOverlay(input: RenderInput): Buffer {
-  const { headline, dealerName, city, phone, primaryColor, price } = input;
+  const { headline, primaryColor, price } = input;
   const [r, g, b] = hexRgb(primaryColor);
   const lines = wrapText(headline, 32, 2);
   const hasPrice = price != null && price > 0;
+  const PANEL_Y = 960;
 
-  const headlineY = 700;
-  const priceY = hasPrice ? headlineY + lines.length * 52 + 44 : null;
-  const ctaY = (priceY ?? headlineY + lines.length * 52) + 40;
+  const headlineY = 650;
+  const priceY = hasPrice ? headlineY + lines.length * 52 + 36 : null;
 
   const priceEl = priceY
     ? `<text x="60" y="${priceY}" font-family="Helvetica Neue,Arial,sans-serif" font-size="30"
@@ -128,28 +150,26 @@ function minimalShowcaseOverlay(input: RenderInput): Buffer {
     .join('\n  ');
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1080">
-  <rect y="580" width="1080" height="500" fill="white"/>
+  <rect y="580" width="1080" height="${PANEL_Y - 580}" fill="white"/>
   <rect y="580" width="1080" height="6" fill="${x(primaryColor)}"/>
-  <text x="60" y="644" font-family="Helvetica Neue,Arial,sans-serif" font-size="22"
-    font-weight="700" fill="rgb(${r},${g},${b})">${x(dealerName)}</text>
   ${headlineEls}
   ${priceEl}
-  <text x="60" y="${Math.min(ctaY, 1050)}" font-family="Helvetica Neue,Arial,sans-serif" font-size="19"
-    fill="#6b7280">${x(city)} &#183; ${x(phone)}</text>
+  ${dealerPanelSvg(input, PANEL_Y)}
 </svg>`;
 
   return Buffer.from(svg);
 }
 
 // ─── Template 3: Offer Card ────────────────────────────────────────────────────
-// Solid primary-color background. Top header bar. Car image center. Dark footer card.
+// Solid primary-color background. Subtle top bar. Car image center. Dealer panel bottom.
 function offerCardOverlay(input: RenderInput): Buffer {
-  const { headline, dealerName, city, phone, primaryColor, price } = input;
+  const { headline, primaryColor, price } = input;
   const lines = wrapText(headline, 30, 2);
   const hasPrice = price != null && price > 0;
+  const PANEL_Y = 960;
 
-  const headlineY = 820;
-  const priceY = hasPrice ? headlineY + lines.length * 52 + 36 : null;
+  const headlineY = PANEL_Y - (hasPrice ? 170 : 120);
+  const priceY = hasPrice ? headlineY + lines.length * 52 + 28 : null;
 
   const priceEl = priceY
     ? `<text x="60" y="${priceY}" font-family="Helvetica Neue,Arial,sans-serif" font-size="28"
@@ -163,14 +183,10 @@ function offerCardOverlay(input: RenderInput): Buffer {
     .join('\n  ');
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1080">
-  <rect width="1080" height="108" fill="rgba(0,0,0,0.35)"/>
-  <text x="540" y="70" font-family="Helvetica Neue,Arial,sans-serif" font-size="30"
-    font-weight="700" fill="white" text-anchor="middle">${x(dealerName)}</text>
-  <rect y="760" width="1080" height="320" fill="rgba(0,0,0,0.82)"/>
+  <rect y="${PANEL_Y - 220}" width="1080" height="220" fill="rgba(0,0,0,0.78)"/>
   ${headlineEls}
   ${priceEl}
-  <text x="60" y="1050" font-family="Helvetica Neue,Arial,sans-serif" font-size="19"
-    fill="rgba(255,255,255,0.65)">${x(city)} &#183; ${x(phone)}</text>
+  ${dealerPanelSvg(input, PANEL_Y)}
 </svg>`;
 
   return Buffer.from(svg);

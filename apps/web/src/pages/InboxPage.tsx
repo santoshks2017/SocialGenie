@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Search, Send, Edit3, AlertTriangle, Check } from 'lucide-react';
-import { Button } from '../components/ui/Button';
+import { Search, Send, AlertTriangle, Check, Star, Sparkles, TrendingUp, MessageSquare, ThumbsUp, ChevronDown, ChevronUp, MoreHorizontal } from 'lucide-react';
 import { useToast } from '../components/ui/Toast';
 import { inboxService, leadService } from '../services/inbox';
 
@@ -26,75 +25,239 @@ interface Message {
 
 const MOCK_MESSAGES: Message[] = [
   {
-    id: '1', platform: 'facebook', type: 'dm', customerName: 'Ramesh Kumar', customerInitials: 'RK',
-    text: 'Hello, what is the on-road price of Hyundai Creta in Delhi? I am looking to buy next month.',
-    timestamp: '10 min ago', sentiment: 'positive', tag: 'lead', isRead: false,
-    suggestedReply: 'Hello Ramesh ji! Thank you for your interest in the Hyundai Creta. The on-road price in Delhi starts from ₹13.5 Lakhs (ex-showroom ₹10.99L + insurance + registration). I would love to share the exact breakdown for your preferred variant. Could you visit our showroom this weekend for a test drive? Call us: +91 98765 43210.',
+    id: '1', platform: 'google', type: 'review', customerName: 'Priya Sharma', customerInitials: 'PS',
+    text: 'Excellent service at Rajesh Motors! Got my new Brezza delivered on time. Amit from the sales team was very helpful throughout the process.',
+    timestamp: '2h ago', sentiment: 'positive', tag: 'general', isRead: false, rating: 5,
+    suggestedReply: 'Thank you so much, Priya! We\'re thrilled to hear about your wonderful experience at Rajesh Motors. Amit and the entire team truly appreciate your kind words — it means a lot to us! We\'re so glad your Brezza delivery was smooth and memorable. Enjoy every ride, and don\'t hesitate to reach out for any after-sales needs. 🚗',
   },
   {
-    id: '2', platform: 'google', type: 'review', customerName: 'Priya Sharma', customerInitials: 'PS',
-    text: 'Pathetic service! My car has been in service for 15 days and no one is giving proper updates. Very disappointed with Cardeko.',
-    timestamp: '1 hour ago', sentiment: 'negative', tag: 'complaint', isRead: false, rating: 1,
-    suggestedReply: 'Dear Priya ji, we sincerely apologise for your experience. This is not the standard of service we hold ourselves to. Our service manager will personally call you within the next 30 minutes to provide a full update and resolution. We value your trust in us and will make this right.',
+    id: '2', platform: 'google', type: 'review', customerName: 'Vikram Patel', customerInitials: 'VP',
+    text: 'Waited 45 minutes for service even with an appointment. The staff was rude when I asked for an update. Very disappointing experience.',
+    timestamp: '5h ago', sentiment: 'negative', tag: 'complaint', isRead: false, rating: 2,
+    suggestedReply: 'Dear Vikram, we sincerely apologise for the delay and the service experience you had. This is not the standard we hold ourselves to. Our service manager will personally reach out within the next hour to understand what went wrong and make it right for you. Your trust matters to us.',
   },
   {
-    id: '3', platform: 'instagram', type: 'comment', customerName: 'Aakash Patel', customerInitials: 'AP',
-    text: 'Wow beautiful car! Is the red color available in the top variant? What is the EMI for 5 years?',
-    timestamp: '3 hours ago', sentiment: 'positive', tag: 'lead', isRead: true,
-    postContext: 'Maruti Brezza Weekend Offer post',
-    suggestedReply: 'Hi Aakash! Yes, the Brezza is absolutely stunning in red! The top variant (Alpha) is available. For a 5-year EMI at 9.5% interest, you would pay approximately ₹16,500/month with zero down payment. DM us or call +91 98765 43210 to book a test drive this weekend!',
+    id: '3', platform: 'facebook', type: 'comment', customerName: 'Ankit Dubey', customerInitials: 'AD',
+    text: 'What\'s the on-road price for Baleno in Mumbai? Interested in the Zeta variant.',
+    timestamp: '8h ago', sentiment: 'positive', tag: 'lead', isRead: true,
+    postContext: 'Maruti Baleno New Arrival post',
+    suggestedReply: 'Hi Ankit! The Baleno Zeta on-road price in Mumbai starts from approx ₹9.5 Lakhs (ex-showroom ₹8.2L + insurance + registration). DM us or call +91 98765 43210 for an exact quote and to book your test drive this weekend! 🚗',
   },
   {
-    id: '4', platform: 'facebook', type: 'comment', customerName: 'Sunita Verma', customerInitials: 'SV',
-    text: 'Great showroom! Very helpful staff. Bought my Nexon EV last month and loving every drive.',
-    timestamp: '5 hours ago', sentiment: 'positive', tag: 'general', isRead: true,
-    postContext: 'Customer Testimonial post',
-    suggestedReply: 'Thank you so much Sunita ji! We are thrilled to hear you are loving your Nexon EV! Your trust means the world to us. We hope every drive brings you joy. Do not hesitate to reach out for any service needs. Happy driving!',
+    id: '4', platform: 'instagram', type: 'comment', customerName: 'Neha Gupta', customerInitials: 'NG',
+    text: 'Love this! Just got my Swift from Rajesh Motors last week. Best car buying experience ever! 😍',
+    timestamp: '12h ago', sentiment: 'positive', tag: 'general', isRead: true,
+    suggestedReply: 'Thank you so much, Neha! We\'re overjoyed to hear this. Enjoy every drive in your new Swift — it\'s a wonderful car! Do share your experience on Google Reviews too. Happy to help with any service needs. 🌟',
   },
   {
-    id: '5', platform: 'google', type: 'review', customerName: 'Mohammed Iqbal', customerInitials: 'MI',
-    text: 'Average experience. Sales team was helpful but delivery took longer than promised. Car is good though.',
-    timestamp: '1 day ago', sentiment: 'neutral', tag: 'general', isRead: true, rating: 3,
-    suggestedReply: 'Thank you for your honest feedback, Mohammed ji. We apologise for the delay in delivery — we understand how frustrating that can be. We are working to improve our delivery timelines. We are glad you are enjoying the car. Please do not hesitate to call us for any after-sales support.',
-  },
-  {
-    id: '6', platform: 'instagram', type: 'comment', customerName: 'Win iPhone 15 FREE!!!', customerInitials: 'SP',
-    text: 'CLICK HERE to WIN FREE iPhone 15! Limited offer! t.me/scam_link visit now!!!',
-    timestamp: '2 days ago', sentiment: 'neutral', tag: 'spam', isRead: true,
-    suggestedReply: '',
+    id: '5', platform: 'google', type: 'review', customerName: 'Suresh Kumar', customerInitials: 'SK',
+    text: 'Good showroom with nice staff. The test drive experience was great. Bought a Creta and very happy with the purchase.',
+    timestamp: '1d ago', sentiment: 'positive', tag: 'general', isRead: true, rating: 4,
+    suggestedReply: 'Thank you, Suresh! We\'re thrilled you\'re enjoying your new Creta — it\'s a fantastic choice! The entire team at Rajesh Motors is grateful for your trust. Do reach out anytime for service or support. Happy driving! 🚗',
   },
 ];
 
 const PLATFORM_STYLES: Record<Platform, { label: string; color: string; bg: string }> = {
-  facebook: { label: 'Facebook', color: 'text-blue-700', bg: 'bg-blue-100' },
-  instagram: { label: 'Instagram', color: 'text-pink-700', bg: 'bg-pink-100' },
-  google: { label: 'Google', color: 'text-green-700', bg: 'bg-green-100' },
+  facebook: { label: 'Facebook', color: 'text-blue-700', bg: 'bg-blue-50' },
+  instagram: { label: 'Instagram', color: 'text-pink-700', bg: 'bg-pink-50' },
+  google: { label: 'Google Review', color: 'text-green-700', bg: 'bg-green-50' },
 };
 
 const TAG_STYLES: Record<Tag, string> = {
   lead: 'bg-green-100 text-green-700',
   complaint: 'bg-red-100 text-red-700',
-  general: 'bg-blue-100 text-blue-700',
+  general: 'bg-stone-100 text-stone-600',
   spam: 'bg-gray-100 text-gray-500',
 };
 
-function StarRating({ rating }: { rating: number }) {
+function StarRating({ rating, size = 'sm' }: { rating: number; size?: 'sm' | 'xs' }) {
+  const cls = size === 'xs' ? 'w-2.5 h-2.5' : 'w-3.5 h-3.5';
   return (
     <div className="flex gap-0.5">
-      {[1,2,3,4,5].map((s) => (
-        <span key={s} className={s <= rating ? 'text-yellow-400' : 'text-gray-200'}>★</span>
+      {[1, 2, 3, 4, 5].map((s) => (
+        <Star key={s} className={`${cls} ${s <= rating ? 'text-yellow-400 fill-yellow-400' : 'text-stone-200 fill-stone-200'}`} />
       ))}
     </div>
   );
 }
 
+function ReviewCard({
+  msg,
+  expanded,
+  onToggle,
+  onSend,
+  onCreateLead,
+  sent,
+  leadCreated,
+}: {
+  msg: Message;
+  expanded: boolean;
+  onToggle: () => void;
+  onSend: (id: string, text: string) => void;
+  onCreateLead: (id: string) => void;
+  sent: boolean;
+  leadCreated: boolean;
+}) {
+  const [editingReply, setEditingReply] = useState(false);
+  const [replyText, setReplyText] = useState(msg.suggestedReply);
+  const ps = PLATFORM_STYLES[msg.platform];
+
+  return (
+    <div className={`bg-white rounded-2xl border transition-all shadow-sm ${
+      msg.sentiment === 'negative' ? 'border-red-200' : 'border-stone-200'
+    }`}>
+      {/* Card header */}
+      <div className="flex items-start gap-3 p-5">
+        <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-400 to-orange-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
+          {msg.customerInitials}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
+            <span className="font-bold text-stone-900 text-sm">{msg.customerName}</span>
+            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${ps.bg} ${ps.color}`}>
+              {ps.label}
+            </span>
+            {msg.tag !== 'general' && (
+              <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${TAG_STYLES[msg.tag]}`}>
+                {msg.tag.charAt(0).toUpperCase() + msg.tag.slice(1)}
+              </span>
+            )}
+            {!msg.isRead && (
+              <span className="w-2 h-2 bg-orange-500 rounded-full" />
+            )}
+            <span className="text-[11px] text-stone-400 ml-auto">{msg.timestamp}</span>
+          </div>
+
+          {msg.rating !== undefined && (
+            <div className="mb-1.5">
+              <StarRating rating={msg.rating} />
+            </div>
+          )}
+          <p className="text-sm text-stone-700 leading-relaxed">{msg.text}</p>
+          {msg.postContext && (
+            <p className="text-xs text-stone-400 mt-1">on "{msg.postContext}"</p>
+          )}
+        </div>
+
+        <button onClick={onToggle} className="text-stone-400 hover:text-stone-600 transition-colors p-1">
+          {expanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </button>
+      </div>
+
+      {/* Alerts */}
+      {expanded && msg.sentiment === 'negative' && (
+        <div className="mx-5 mb-3 flex items-center gap-2 bg-red-50 border border-red-200 rounded-xl p-3">
+          <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
+          <p className="text-xs text-red-700 font-medium">Negative sentiment — review carefully before sending.</p>
+        </div>
+      )}
+
+      {expanded && msg.tag === 'lead' && !leadCreated && (
+        <div className="mx-5 mb-3 flex items-center justify-between bg-green-50 border border-green-200 rounded-xl p-3">
+          <p className="text-xs text-green-700 font-semibold">This looks like a sales lead!</p>
+          <button
+            onClick={() => onCreateLead(msg.id)}
+            className="text-xs bg-green-600 hover:bg-green-700 text-white font-semibold px-3 py-1.5 rounded-lg transition-colors"
+          >
+            Create Lead
+          </button>
+        </div>
+      )}
+      {expanded && leadCreated && (
+        <div className="mx-5 mb-3 flex items-center gap-2 bg-green-50 border border-green-200 rounded-xl p-3">
+          <Check className="w-4 h-4 text-green-600" />
+          <p className="text-xs text-green-700 font-semibold">Lead created successfully</p>
+        </div>
+      )}
+
+      {/* AI Suggested Reply */}
+      {expanded && !sent && msg.tag !== 'spam' && (
+        <div className="mx-5 mb-5 space-y-3">
+          <div className={`rounded-xl p-4 border ${
+            msg.sentiment === 'negative' ? 'bg-red-50 border-red-100' : 'bg-teal-50 border-teal-100'
+          }`}>
+            <div className="flex items-center justify-between mb-2">
+              <span className={`text-xs font-bold flex items-center gap-1.5 ${
+                msg.sentiment === 'negative' ? 'text-red-700' : 'text-teal-700'
+              }`}>
+                <Sparkles className="w-3.5 h-3.5" /> AI Suggested Reply
+                <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ml-1 ${
+                  msg.sentiment === 'negative'
+                    ? 'bg-red-100 text-red-600'
+                    : 'bg-teal-100 text-teal-600'
+                }`}>
+                  {msg.sentiment === 'positive' ? 'POSITIVE TONE' : msg.sentiment === 'negative' ? 'RECOVERY TONE' : 'NEUTRAL TONE'}
+                </span>
+              </span>
+              <button
+                onClick={() => setEditingReply((v) => !v)}
+                className="text-xs text-stone-500 hover:text-stone-800 font-semibold transition-colors"
+              >
+                {editingReply ? 'Preview' : 'Edit'}
+              </button>
+            </div>
+
+            {editingReply ? (
+              <textarea
+                value={replyText}
+                onChange={(e) => setReplyText(e.target.value)}
+                className="w-full h-24 text-sm p-3 border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none bg-white"
+              />
+            ) : (
+              <p className="text-sm text-stone-700 leading-relaxed">{replyText}</p>
+            )}
+          </div>
+
+          <div className="flex gap-2">
+            <button
+              onClick={() => onSend(msg.id, replyText)}
+              className={`flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-xl transition-colors ${
+                msg.sentiment === 'negative'
+                  ? 'bg-red-600 hover:bg-red-700 text-white'
+                  : 'bg-teal-600 hover:bg-teal-700 text-white'
+              }`}
+            >
+              <Check className="w-3.5 h-3.5" /> Approve &amp; Send
+            </button>
+            <button
+              onClick={() => setEditingReply(true)}
+              className="text-xs font-semibold text-stone-600 hover:text-stone-900 px-3 py-2 rounded-xl border border-stone-200 hover:bg-stone-50 transition-colors"
+            >
+              Edit
+            </button>
+          </div>
+        </div>
+      )}
+
+      {expanded && sent && (
+        <div className="mx-5 mb-5 flex items-center gap-2 bg-teal-50 border border-teal-200 rounded-xl p-3">
+          <Check className="w-4 h-4 text-teal-600" />
+          <p className="text-xs text-teal-700 font-semibold">Reply sent successfully</p>
+        </div>
+      )}
+
+      {expanded && msg.tag === 'spam' && (
+        <div className="mx-5 mb-5 text-center">
+          <p className="text-sm text-stone-400 mb-2">Spam messages are hidden from responses.</p>
+          <button
+            onClick={() => {/* mark not spam */}}
+            className="text-xs text-stone-500 hover:text-stone-800 border border-stone-200 rounded-lg px-3 py-1.5 transition-colors"
+          >
+            Mark as Not Spam
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── InboxPage (Reviews Hub) ──────────────────────────────────────────────────
 export default function InboxPage() {
   const [messages, setMessages] = useState(MOCK_MESSAGES);
-  const [selected, setSelected] = useState<Message | null>(messages[0] ?? null);
   const [searchQuery, setSearchQuery] = useState('');
-  const [activeFilter, setActiveFilter] = useState<'all' | 'unread' | Platform | Tag>('all');
-  const [editingReply, setEditingReply] = useState(false);
-  const [replyText, setReplyText] = useState('');
+  const [activeFilter, setActiveFilter] = useState<'all' | Platform>('all');
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set(['1']));
   const [sentIds, setSentIds] = useState<Set<string>>(new Set());
   const [leadCreatedIds, setLeadCreatedIds] = useState<Set<string>>(new Set());
   const { addToast } = useToast();
@@ -116,287 +279,269 @@ export default function InboxPage() {
         suggestedReply: item.aiSuggestedReply ?? '',
       }));
       setMessages(mapped);
-      setSelected(mapped[0] ?? null);
     }).catch(console.error);
   }, []);
 
   const filtered = messages.filter((m) => {
-    const matchSearch = !searchQuery || m.customerName.toLowerCase().includes(searchQuery.toLowerCase()) || m.text.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchSearch = !searchQuery
+      || m.customerName.toLowerCase().includes(searchQuery.toLowerCase())
+      || m.text.toLowerCase().includes(searchQuery.toLowerCase());
     if (!matchSearch) return false;
     if (activeFilter === 'all') return true;
-    if (activeFilter === 'unread') return !m.isRead;
-    if (['facebook','instagram','google'].includes(activeFilter)) return m.platform === activeFilter;
-    return m.tag === activeFilter;
+    return m.platform === activeFilter;
   });
 
-  const handleSelect = (msg: Message) => {
-    setSelected(msg);
-    setEditingReply(false);
-    setReplyText(msg.suggestedReply);
-    if (!msg.isRead) inboxService.markRead(msg.id).catch(console.error);
-    setMessages((prev) => prev.map((m) => m.id === msg.id ? { ...m, isRead: true } : m));
+  const toggleExpand = (id: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      if (!messages.find((m) => m.id === id)?.isRead) {
+        inboxService.markRead(id).catch(console.error);
+        setMessages((prev2) => prev2.map((m) => m.id === id ? { ...m, isRead: true } : m));
+      }
+      return next;
+    });
   };
 
-  const handleSend = () => {
-    if (!selected) return;
-    const text = editingReply ? replyText : selected.suggestedReply;
-    inboxService.sendReply(selected.id, text).catch(console.error);
-    setSentIds((prev) => new Set(prev).add(selected.id));
-    setEditingReply(false);
+  const handleSend = (id: string, text: string) => {
+    inboxService.sendReply(id, text).catch(console.error);
+    setSentIds((prev) => new Set(prev).add(id));
   };
 
-  const handleCreateLead = async () => {
-    if (!selected) return;
+  const handleCreateLead = async (id: string) => {
+    const msg = messages.find((m) => m.id === id);
+    if (!msg) return;
     try {
       await leadService.create({
-        customerName: selected.customerName,
-        sourcePlatform: selected.platform as 'facebook' | 'instagram' | 'gmb',
-        sourceMessageId: selected.id,
+        customerName: msg.customerName,
+        sourcePlatform: msg.platform as 'facebook' | 'instagram' | 'gmb',
+        sourceMessageId: msg.id,
       });
-      setLeadCreatedIds((prev) => new Set(prev).add(selected.id));
-      addToast({ type: 'success', title: 'Lead created', message: `${selected.customerName} added to your leads.` });
+      setLeadCreatedIds((prev) => new Set(prev).add(id));
+      addToast({ type: 'success', title: 'Lead created', message: `${msg.customerName} added to your leads.` });
     } catch {
       addToast({ type: 'error', title: 'Failed to create lead', message: 'Please try again.' });
     }
   };
 
-  const handleMarkNotSpam = (id: string) => {
-    inboxService.updateTag(id, 'general').catch(() => {
-      addToast({ type: 'error', title: 'Failed to update tag' });
-    });
-    setMessages((prev) => prev.map((m) => m.id === id ? { ...m, tag: 'general' } : m));
-    if (selected?.id === id) setSelected((s) => s ? { ...s, tag: 'general' } : s);
-  };
+  const pendingCount = messages.filter((m) => !m.isRead).length;
+  const repliedCount = messages.length - pendingCount;
+  const avgRating = (() => {
+    const rated = messages.filter((m) => m.rating !== undefined);
+    if (!rated.length) return 0;
+    return rated.reduce((s, m) => s + (m.rating ?? 0), 0) / rated.length;
+  })();
 
-  const unreadCount = messages.filter((m) => !m.isRead).length;
+  const platformCounts: Record<string, number> = { google: 0, facebook: 0, instagram: 0 };
+  messages.forEach((m) => { platformCounts[m.platform] = (platformCounts[m.platform] ?? 0) + 1; });
 
   return (
-    <div className="max-w-6xl mx-auto h-[calc(100vh-140px)] flex flex-col md:flex-row gap-0 bg-white rounded-xl border border-gray-200 overflow-hidden">
-      {/* Left panel — message list */}
-      <div className="w-full md:w-80 flex-shrink-0 border-r border-gray-100 flex flex-col">
-        {/* Search + filters */}
-        <div className="p-3 border-b space-y-2">
-          <div className="flex items-center gap-2">
-            <h2 className="text-base font-bold text-gray-900 flex-1">Inbox</h2>
-            {unreadCount > 0 && (
-              <span className="bg-red-500 text-white text-[10px] font-bold rounded-full px-1.5 py-0.5">{unreadCount}</span>
-            )}
-          </div>
+    <div className="max-w-[1200px] mx-auto">
+      {/* Header */}
+      <div className="flex items-start justify-between mb-5 flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-extrabold text-stone-900">Review &amp; Comment Inbox</h1>
+          <p className="text-sm text-stone-500 mt-0.5">All customer feedback across platforms — respond with AI assistance</p>
+        </div>
+        <div className="flex items-center gap-2">
           <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-stone-400" />
             <input
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Search messages..."
-              className="w-full pl-8 pr-3 py-1.5 text-xs border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Search reviews..."
+              className="pl-9 pr-4 py-2 text-sm border border-stone-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-400 bg-white w-52"
             />
           </div>
-          <div className="flex gap-1.5 flex-wrap">
-            {(['all','unread','facebook','instagram','google'] as const).map((f) => (
-              <button
-                key={f}
-                onClick={() => setActiveFilter(f)}
-                className={`text-[10px] px-2 py-0.5 rounded-full border font-medium transition-colors ${
-                  activeFilter === f ? 'bg-blue-600 text-white border-blue-600' : 'text-gray-600 border-gray-200 hover:border-blue-300'
-                }`}
-              >
-                {f === 'all' ? 'All' : f.charAt(0).toUpperCase() + f.slice(1)}
-              </button>
-            ))}
-          </div>
-          <div className="flex gap-1.5">
-            {(['lead','complaint','general','spam'] as const).map((t) => (
-              <button
-                key={t}
-                onClick={() => setActiveFilter(t)}
-                className={`text-[10px] px-2 py-0.5 rounded-full border font-medium transition-colors ${
-                  activeFilter === t ? 'bg-blue-600 text-white border-blue-600' : `${TAG_STYLES[t]} border-transparent`
-                }`}
-              >
-                {t.charAt(0).toUpperCase() + t.slice(1)}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Message list */}
-        <div className="flex-1 overflow-y-auto divide-y divide-gray-50">
-          {filtered.length === 0 ? (
-            <div className="p-6 text-center text-gray-400 text-sm">No messages found</div>
-          ) : filtered.map((msg) => {
-            const ps = PLATFORM_STYLES[msg.platform];
-            return (
-              <button
-                key={msg.id}
-                onClick={() => handleSelect(msg)}
-                className={`w-full text-left p-3 hover:bg-gray-50 transition-colors ${selected?.id === msg.id ? 'bg-blue-50' : ''}`}
-              >
-                <div className="flex items-start gap-2">
-                  {/* Avatar */}
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white text-[10px] font-bold flex-shrink-0">
-                    {msg.customerInitials}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-1.5 mb-0.5">
-                      <p className={`text-xs font-semibold truncate ${!msg.isRead ? 'text-gray-900' : 'text-gray-600'}`}>
-                        {msg.customerName}
-                      </p>
-                      {!msg.isRead && <span className="w-1.5 h-1.5 bg-blue-500 rounded-full flex-shrink-0" />}
-                    </div>
-                    <p className="text-[11px] text-gray-500 line-clamp-2 leading-relaxed">{msg.text}</p>
-                    <div className="flex items-center gap-1.5 mt-1">
-                      <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full ${ps.bg} ${ps.color}`}>
-                        {ps.label}
-                      </span>
-                      <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded-full ${TAG_STYLES[msg.tag]}`}>
-                        {msg.tag}
-                      </span>
-                      <span className="text-[9px] text-gray-400 ml-auto">{msg.timestamp}</span>
-                    </div>
-                  </div>
-                </div>
-              </button>
-            );
-          })}
+          <button className="flex items-center gap-1.5 text-sm text-stone-600 hover:text-stone-900 border border-stone-200 rounded-xl px-3 py-2 bg-white hover:bg-stone-50 transition-colors font-medium">
+            <MoreHorizontal className="w-4 h-4" /> Sort
+          </button>
         </div>
       </div>
 
-      {/* Right panel — message thread */}
-      {selected ? (
-        <div className="flex-1 flex flex-col overflow-hidden">
-          {/* Thread header */}
-          <div className="px-5 py-3 border-b flex items-center gap-3">
-            <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white text-xs font-bold">
-              {selected.customerInitials}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-6">
+        {/* Main content */}
+        <div className="space-y-4">
+          {/* Stats row */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+              { label: 'Pending', value: pendingCount, icon: MessageSquare, color: 'text-orange-600', bg: 'bg-orange-50', iconColor: 'text-orange-500' },
+              { label: 'Replied', value: repliedCount, icon: Check, color: 'text-teal-600', bg: 'bg-teal-50', iconColor: 'text-teal-500' },
+              { label: 'Avg Rating', value: avgRating.toFixed(1), icon: Star, color: 'text-yellow-600', bg: 'bg-yellow-50', iconColor: 'text-yellow-500' },
+              { label: 'This Week', value: messages.length, icon: TrendingUp, color: 'text-stone-700', bg: 'bg-stone-100', iconColor: 'text-stone-500' },
+            ].map(({ label, value, icon: Icon, color, bg, iconColor }) => (
+              <div key={label} className="bg-white rounded-2xl border border-stone-200 p-4 shadow-sm">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-semibold text-stone-500">{label}</p>
+                  <div className={`w-7 h-7 ${bg} rounded-xl flex items-center justify-center`}>
+                    <Icon className={`w-3.5 h-3.5 ${iconColor}`} />
+                  </div>
+                </div>
+                <p className={`text-2xl font-extrabold ${color}`}>{value}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Platform filter tabs */}
+          <div className="flex gap-2 flex-wrap">
+            {([
+              { key: 'all', label: `All ${messages.length}` },
+              { key: 'google', label: `Google ${platformCounts['google'] ?? 0}` },
+              { key: 'facebook', label: `Facebook ${platformCounts['facebook'] ?? 0}` },
+              { key: 'instagram', label: `Instagram ${platformCounts['instagram'] ?? 0}` },
+            ] as const).map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setActiveFilter(key)}
+                className={`flex items-center gap-1.5 text-sm font-semibold px-4 py-2 rounded-xl border transition-colors ${
+                  activeFilter === key
+                    ? 'bg-stone-900 text-white border-stone-900'
+                    : 'bg-white text-stone-600 border-stone-200 hover:bg-stone-50'
+                }`}
+              >
+                {key === 'google' && <span className="text-[10px] font-bold text-[#4285F4]">G</span>}
+                {key === 'facebook' && <span className="text-[10px] font-bold text-[#1877F2]">f</span>}
+                {key === 'instagram' && <span className="text-[10px] font-bold text-pink-500">Ig</span>}
+                {label}
+              </button>
+            ))}
+          </div>
+
+          {/* Review cards */}
+          {filtered.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-stone-200 p-12 text-center shadow-sm">
+              <MessageSquare className="w-10 h-10 text-stone-300 mx-auto mb-3" />
+              <p className="text-stone-500 font-medium">No reviews found</p>
+              <p className="text-stone-400 text-sm mt-1">Try adjusting your search or filter</p>
             </div>
-            <div className="flex-1">
-              <p className="font-semibold text-gray-900 text-sm">{selected.customerName}</p>
-              <div className="flex items-center gap-2">
-                <span className={`text-[10px] font-medium ${PLATFORM_STYLES[selected.platform].color}`}>
-                  via {PLATFORM_STYLES[selected.platform].label} {selected.type}
-                </span>
-                {selected.postContext && <span className="text-[10px] text-gray-400">· on "{selected.postContext}"</span>}
+          ) : (
+            <div className="space-y-3">
+              {filtered.map((msg) => (
+                <ReviewCard
+                  key={msg.id}
+                  msg={msg}
+                  expanded={expandedIds.has(msg.id)}
+                  onToggle={() => toggleExpand(msg.id)}
+                  onSend={handleSend}
+                  onCreateLead={handleCreateLead}
+                  sent={sentIds.has(msg.id)}
+                  leadCreated={leadCreatedIds.has(msg.id)}
+                />
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Right sidebar */}
+        <div className="space-y-4">
+          {/* Response Stats */}
+          <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
+            <h3 className="font-bold text-stone-900 mb-4">Response Stats</h3>
+            <div className="space-y-4">
+              <div>
+                <div className="flex items-start justify-between mb-2">
+                  <div>
+                    <p className="text-xs text-stone-500 font-medium mb-0.5">Response Rate</p>
+                    <p className="text-2xl font-extrabold text-teal-600">
+                      {messages.length > 0 ? Math.round((repliedCount / messages.length) * 100) : 0}%
+                    </p>
+                    <p className="text-xs text-teal-600 font-semibold">this month</p>
+                  </div>
+                  <div className="w-8 h-8 bg-teal-50 rounded-xl flex items-center justify-center">
+                    <Send className="w-4 h-4 text-teal-500" />
+                  </div>
+                </div>
+                <div className="w-full bg-stone-100 rounded-full h-2">
+                  <div
+                    className="bg-teal-500 h-2 rounded-full"
+                    style={{ width: `${messages.length > 0 ? (repliedCount / messages.length) * 100 : 0}%` }}
+                  />
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-stone-100">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-xs text-stone-500 font-medium mb-0.5">Avg Response Time</p>
+                    <p className="text-2xl font-extrabold text-stone-900">2.4h</p>
+                    <p className="text-xs text-stone-400">goal: under 4h</p>
+                  </div>
+                  <div className="w-8 h-8 bg-yellow-50 rounded-xl flex items-center justify-center">
+                    <TrendingUp className="w-4 h-4 text-yellow-500" />
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-stone-100">
+                <div className="flex items-start justify-between">
+                  <div>
+                    <p className="text-xs text-stone-500 font-medium mb-0.5">Pending Replies</p>
+                    <p className="text-2xl font-extrabold text-stone-900">{pendingCount}</p>
+                    <p className="text-xs text-orange-600 font-semibold">need attention</p>
+                  </div>
+                  <div className="w-8 h-8 bg-orange-50 rounded-xl flex items-center justify-center">
+                    <MessageSquare className="w-4 h-4 text-orange-500" />
+                  </div>
+                </div>
               </div>
             </div>
-            <div className="flex gap-2">
-              {(['lead','complaint','general','spam'] as const).map((t) => (
-                <button
-                  key={t}
-                  onClick={() => { inboxService.updateTag(selected.id, t).catch(console.error); setMessages((prev) => prev.map((m) => m.id === selected.id ? { ...m, tag: t } : m)); }}
-                  className={`text-[10px] font-medium px-2 py-0.5 rounded-full border transition-colors ${
-                    selected.tag === t ? `${TAG_STYLES[t]} border-transparent` : 'border-gray-200 text-gray-400 hover:border-gray-300'
-                  }`}
-                >
-                  {t}
-                </button>
+          </div>
+
+          {/* Platform Breakdown */}
+          <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
+            <h3 className="font-bold text-stone-900 mb-4">Platform Breakdown</h3>
+            <div className="space-y-3">
+              {[
+                { platform: 'Google Reviews', color: '#4285F4', avg: avgRating.toFixed(1), count: platformCounts['google'] ?? 0, pending: messages.filter((m) => m.platform === 'google' && !m.isRead).length },
+                { platform: 'Facebook', color: '#1877F2', avg: null, count: platformCounts['facebook'] ?? 0, pending: messages.filter((m) => m.platform === 'facebook' && !m.isRead).length },
+                { platform: 'Instagram', color: '#E1306C', avg: null, count: platformCounts['instagram'] ?? 0, pending: messages.filter((m) => m.platform === 'instagram' && !m.isRead).length },
+              ].map(({ platform, color, avg, count, pending }) => (
+                <div key={platform} className="flex items-center justify-between p-3 bg-stone-50 rounded-xl">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: `${color}20` }}>
+                      <div className="w-3 h-3 rounded-full" style={{ background: color }} />
+                    </div>
+                    <div>
+                      <p className="text-xs font-bold text-stone-800">{platform}</p>
+                      <p className="text-[10px] text-stone-400">
+                        {avg ? `${avg} avg · ` : ''}{count} this week
+                      </p>
+                    </div>
+                  </div>
+                  {pending > 0 && (
+                    <span className="text-[10px] font-bold bg-orange-100 text-orange-700 px-2 py-0.5 rounded-full">
+                      {pending} pending
+                    </span>
+                  )}
+                </div>
               ))}
             </div>
           </div>
 
-          {/* Customer message */}
-          <div className="flex-1 overflow-y-auto p-5 space-y-4">
-            <div className="flex gap-3">
-              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
-                {selected.customerInitials}
-              </div>
-              <div className="flex-1">
-                <div className={`bg-gray-50 rounded-2xl rounded-tl-sm p-4 max-w-lg border ${
-                  selected.sentiment === 'negative' ? 'border-red-200 bg-red-50' : 'border-gray-100'
-                }`}>
-                  {selected.rating && <StarRating rating={selected.rating} />}
-                  <p className="text-sm text-gray-800 mt-1 leading-relaxed">{selected.text}</p>
-                </div>
-                <p className="text-[10px] text-gray-400 mt-1 ml-1">{selected.timestamp}</p>
-              </div>
-            </div>
-
-            {/* Negative sentiment warning */}
-            {selected.sentiment === 'negative' && (
-              <div className="flex items-center gap-2 bg-red-50 border border-red-200 rounded-lg p-3">
-                <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
-                <p className="text-xs text-red-700 font-medium">Negative sentiment detected. Review suggested response carefully before sending.</p>
-              </div>
-            )}
-
-            {/* Lead CTA */}
-            {selected.tag === 'lead' && (
-              <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex items-center justify-between">
-                <p className="text-xs text-green-700 font-medium">This looks like a sales lead! Create a lead record.</p>
-                {leadCreatedIds.has(selected.id) ? (
-                  <span className="text-xs text-green-600 font-medium flex items-center gap-1"><Check className="w-3 h-3" /> Lead created</span>
-                ) : (
-                  <Button variant="secondary" className="text-xs py-1 px-3 h-auto" onClick={handleCreateLead}>Create Lead</Button>
-                )}
-              </div>
-            )}
-
-            {/* Sent confirmation */}
-            {sentIds.has(selected.id) && (
-              <div className="flex justify-end">
-                <div className="bg-blue-600 rounded-2xl rounded-br-sm p-4 max-w-lg">
-                  <p className="text-sm text-white leading-relaxed">{selected.suggestedReply}</p>
-                  <div className="flex items-center gap-1 mt-1.5 justify-end">
-                    <Check className="w-3 h-3 text-blue-200" />
-                    <p className="text-[10px] text-blue-200">Sent just now</p>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* AI reply section */}
-          {!sentIds.has(selected.id) && selected.tag !== 'spam' && (
-            <div className={`border-t p-4 space-y-3 ${selected.sentiment === 'negative' ? 'border-red-200 bg-red-50/30' : ''}`}>
-              <div className="flex items-center justify-between">
-                <p className="text-xs font-semibold text-gray-600">AI Suggested Reply</p>
+          {/* Quick Actions */}
+          <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
+            <h3 className="font-bold text-stone-900 mb-3.5">Quick Actions</h3>
+            <div className="space-y-2">
+              {[
+                { icon: ThumbsUp, label: 'Reply to all positive reviews', color: 'text-teal-600 bg-teal-50' },
+                { icon: AlertTriangle, label: 'Flag unresolved complaints', color: 'text-orange-600 bg-orange-50' },
+                { icon: Star, label: 'Request more Google reviews', color: 'text-yellow-600 bg-yellow-50' },
+              ].map(({ icon: Icon, label, color }) => (
                 <button
-                  onClick={() => { setEditingReply((v) => !v); setReplyText(selected.suggestedReply); }}
-                  className="flex items-center gap-1 text-xs text-blue-600 hover:text-blue-700"
+                  key={label}
+                  className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-stone-50 border border-transparent hover:border-stone-200 transition-colors text-left"
                 >
-                  <Edit3 className="w-3 h-3" /> Edit
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${color.split(' ')[1]}`}>
+                    <Icon className={`w-3.5 h-3.5 ${color.split(' ')[0]}`} />
+                  </div>
+                  <span className="text-xs font-semibold text-stone-700">{label}</span>
                 </button>
-              </div>
-
-              {editingReply ? (
-                <textarea
-                  value={replyText}
-                  onChange={(e) => setReplyText(e.target.value)}
-                  className="w-full h-24 text-sm p-3 border rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
-                />
-              ) : (
-                <div className={`rounded-lg p-3 border text-sm text-gray-700 leading-relaxed line-clamp-3 ${
-                  selected.sentiment === 'negative' ? 'bg-red-50 border-red-200' : 'bg-blue-50 border-blue-100'
-                }`}>
-                  {selected.suggestedReply}
-                </div>
-              )}
-
-              <div className="flex gap-2">
-                <Button
-                  className="flex-1 flex items-center gap-1.5 justify-center text-sm"
-                  onClick={handleSend}
-                  variant={selected.sentiment === 'negative' ? 'danger' : 'primary'}
-                >
-                  <Send className="w-3.5 h-3.5" />
-                  {selected.sentiment === 'negative' ? 'Approve & Send' : 'Send Reply'}
-                </Button>
-                <Button variant="secondary" className="text-sm">Dismiss</Button>
-              </div>
+              ))}
             </div>
-          )}
-
-          {selected.tag === 'spam' && (
-            <div className="border-t p-4 text-center">
-              <p className="text-sm text-gray-400">Spam messages are hidden from responses.</p>
-              <Button variant="secondary" className="text-xs mt-2" onClick={() => handleMarkNotSpam(selected.id)}>Mark as Not Spam</Button>
-            </div>
-          )}
+          </div>
         </div>
-      ) : (
-        <div className="flex-1 flex items-center justify-center text-gray-400">
-          <p className="text-sm">Select a message to view the thread</p>
-        </div>
-      )}
+      </div>
     </div>
   );
 }

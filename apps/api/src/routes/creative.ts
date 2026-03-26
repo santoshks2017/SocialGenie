@@ -8,16 +8,19 @@ import {
   generateCaptions as ollamaGenerateCaptions,
   isOllamaAvailable,
 } from '../services/ollama.js';
+import {
+  generateCaptions as groqGenerateCaptions,
+  isGroqAvailable,
+} from '../services/groq.js';
 import { renderCreatives, extractHeadline } from '../services/templateRenderer.js';
 import { ORIGINALS_DIR, CREATIVES_DIR } from './upload.js';
+import { uploadFile } from '../lib/storage.js';
 import type { GeneratedCaptions } from '../services/openai.js';
 
 // Simple in-memory cache: key → {result, expires}
 const captionCache = new Map<string, { result: unknown; expires: number }>();
 
-const BASE_URL = process.env['API_BASE_URL'] ?? 'http://localhost:3001';
-
-// Try Ollama → OpenAI → mock
+// Try Ollama → Groq → OpenAI → mock
 async function generateCaptionsAI(
   prompt: string,
   dealerContext: Parameters<typeof openaiGenerateCaptions>[1],
@@ -32,33 +35,43 @@ async function generateCaptionsAI(
     }
   }
 
-  // 2. Try OpenAI
+  // 2. Try Groq
+  if (isGroqAvailable()) {
+    try {
+      return await groqGenerateCaptions(prompt, dealerContext, inventoryContext);
+    } catch (err) {
+      console.error('Groq generation failed, falling back:', err);
+    }
+  }
+
+  // 3. Try OpenAI
   if (process.env['OPENAI_API_KEY']) {
     return await openaiGenerateCaptions(prompt, dealerContext, inventoryContext);
   }
 
-  // 3. Mock fallback
+  // 3. Mock fallback — 3 distinct angles
+  const city = dealerContext.city.replace(/\s/g, '');
   return {
     variants: [
       {
-        caption_text: `${prompt} — Visit ${dealerContext.name} in ${dealerContext.city}! Limited time offer. Call: ${dealerContext.phone}`,
-        hashtags: [`#${dealerContext.city.replace(/\s/g, '')}`, '#CarDeals', '#AutoOffer'],
-        suggested_emoji: ['🚗', '✨'],
-        platform_notes: 'Works for all platforms',
+        caption_text: `⚡ LIMITED TIME OFFER!\n\n${prompt}\n\nDon't miss out — visit ${dealerContext.name} in ${dealerContext.city} TODAY. Stock is limited!\n📞 Call now: ${dealerContext.phone}`,
+        hashtags: [`#${city}`, '#LimitedOffer', '#CarDeal', '#ActNow'],
+        suggested_emoji: ['⚡', '🚗', '📞'],
+        platform_notes: 'Best for Instagram Stories/Reels',
         style: 'punchy',
       },
       {
-        caption_text: `Looking for the best deal? ${prompt}. At ${dealerContext.name}, ${dealerContext.city}, we make car ownership easy. Zero down payment options available. Book your test drive today! Call us: ${dealerContext.phone}`,
-        hashtags: [`#${dealerContext.city.replace(/\s/g, '')}`, '#CarDeals', '#TestDrive', '#AutoFinance'],
-        suggested_emoji: ['🚗', '💰', '📞'],
-        platform_notes: 'Ideal for Facebook long-form',
+        caption_text: `Here's why ${dealerContext.city} customers choose ${dealerContext.name}:\n\n✅ ${prompt}\n✅ Easy finance & EMI options\n✅ Trusted dealership with expert support\n✅ Test drive at your convenience\n\nVisit our showroom or call us at ${dealerContext.phone} to know more. We're here to make your car buying journey smooth and exciting!`,
+        hashtags: [`#${city}`, '#CarBuying', '#TestDrive', '#AutoFinance', '#TrustedDealer'],
+        suggested_emoji: ['✅', '🚗', '💰'],
+        platform_notes: 'Best for Facebook',
         style: 'detailed',
       },
       {
-        caption_text: `Every journey begins with a dream. ${prompt}. Let ${dealerContext.name} make your dream a reality. Visit us in ${dealerContext.city}. WhatsApp: ${dealerContext.whatsapp}`,
-        hashtags: [`#${dealerContext.city.replace(/\s/g, '')}`, '#DreamCar', '#NewBeginnings'],
-        suggested_emoji: ['❤️', '🌟'],
-        platform_notes: 'Best for Instagram stories',
+        caption_text: `Some journeys change everything.\n\n${prompt}.\n\nAt ${dealerContext.name}, we believe every family deserves the car of their dreams. Let us make yours happen.\n\n💬 WhatsApp us: ${dealerContext.whatsapp}`,
+        hashtags: [`#${city}`, '#DreamCar', '#FamilyFirst', '#NewBeginnings'],
+        suggested_emoji: ['❤️', '🌟', '🚗'],
+        platform_notes: 'Best for Instagram Feed',
         style: 'emotional',
       },
     ],
@@ -71,10 +84,11 @@ export default async function creativeRoutes(fastify: FastifyInstance) {
     preHandler: [fastify.authenticate],
   }, async (request, reply) => {
     const dealer_id = request.user.dealer_id as string;
-    const { prompt, platforms, image_id } = request.body as {
+    const { prompt, platforms, image_id, force } = request.body as {
       prompt: string;
       platforms?: string[];
       image_id?: string;  // filename from POST /v1/upload/image
+      force?: boolean;    // bypass caption cache
     };
 
     if (!prompt?.trim()) {
@@ -122,7 +136,7 @@ export default async function creativeRoutes(fastify: FastifyInstance) {
     // Cache captions (not images)
     const cacheKey = `${dealer_id}:${prompt}:${vehicleMatch?.id ?? 'none'}`;
     const cached = captionCache.get(cacheKey);
-    const cachedCaptions = cached && cached.expires > Date.now()
+    const cachedCaptions = !force && cached && cached.expires > Date.now()
       ? (cached.result as GeneratedCaptions)
       : null;
 
@@ -159,32 +173,45 @@ export default async function creativeRoutes(fastify: FastifyInstance) {
           dealerName: dealer.name,
           city: dealer.city,
           phone: dealer.contact_phone ?? dealer.phone,
+          whatsapp: dealer.whatsapp_number ?? dealer.contact_phone ?? dealer.phone,
+          address: [dealer.city, dealer.state].filter(Boolean).join(', '),
           primaryColor: dealer.primary_color ?? '#1877F2',
-          price: inventoryContext?.price,
+          ...(inventoryContext?.price != null ? { price: inventoryContext.price } : {}),
           outputDir: CREATIVES_DIR,
           filePrefix,
         });
 
-        const url = (f: string) => `${BASE_URL}/uploads/creatives/${f}`;
+        // Upload rendered files (S3/R2 in prod, local URL in dev)
+        const { readFile: readRendered } = await import('fs/promises');
+        const uploadRendered = async (filename: string) => {
+          const buf = await readRendered(path.join(CREATIVES_DIR, filename));
+          return uploadFile(buf, `creatives/${filename}`, 'image/png', CREATIVES_DIR);
+        };
+
+        const [bbUrl, msUrl, ocUrl] = await Promise.all([
+          uploadRendered(rendered.boldBanner),
+          uploadRendered(rendered.minimalShowcase),
+          uploadRendered(rendered.offerCard),
+        ]);
 
         creatives = [
           {
             id: 'tpl_bold_banner',
             template_name: 'Bold Banner',
-            thumbnail_url: url(rendered.boldBanner),
-            platform_urls: { facebook: url(rendered.boldBanner), instagram: url(rendered.boldBanner), instagram_story: null, gmb: url(rendered.boldBanner) },
+            thumbnail_url: bbUrl,
+            platform_urls: { facebook: bbUrl, instagram: bbUrl, instagram_story: null, gmb: bbUrl },
           },
           {
             id: 'tpl_minimal',
             template_name: 'Minimal Showcase',
-            thumbnail_url: url(rendered.minimalShowcase),
-            platform_urls: { facebook: url(rendered.minimalShowcase), instagram: url(rendered.minimalShowcase), instagram_story: null, gmb: url(rendered.minimalShowcase) },
+            thumbnail_url: msUrl,
+            platform_urls: { facebook: msUrl, instagram: msUrl, instagram_story: null, gmb: msUrl },
           },
           {
             id: 'tpl_offer_card',
             template_name: 'Offer Card',
-            thumbnail_url: url(rendered.offerCard),
-            platform_urls: { facebook: url(rendered.offerCard), instagram: url(rendered.offerCard), instagram_story: null, gmb: url(rendered.offerCard) },
+            thumbnail_url: ocUrl,
+            platform_urls: { facebook: ocUrl, instagram: ocUrl, instagram_story: null, gmb: ocUrl },
           },
         ];
       } catch (err) {

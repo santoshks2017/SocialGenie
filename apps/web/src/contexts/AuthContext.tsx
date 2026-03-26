@@ -1,6 +1,7 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import type { ReactNode } from 'react';
 import { authService } from '../services/auth';
+import api from '../services/api';
 import type { UserInfo } from '../lib/permissions';
 
 interface AuthContextType {
@@ -41,6 +42,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       logout();
     }
   }, []);
+
+  // Fetch user info from API if token exists but user is missing from localStorage
+  useEffect(() => {
+    if (!token || user) return;
+    api.get<{ user: { id: string; name: string; role: string; dealerId: string | null; permissions: Record<string, boolean> } }>('/users/me')
+      .then((res) => {
+        const u = res.user;
+        const userInfo: UserInfo = {
+          id: u.id,
+          name: u.name,
+          role: u.role as UserInfo['role'],
+          dealer_id: u.dealerId,
+          permissions: u.permissions as UserInfo['permissions'],
+        };
+        localStorage.setItem('user_info', JSON.stringify(userInfo));
+        setUser(userInfo);
+      })
+      .catch(() => { /* token may be invalid; JWT refresh effect handles logout */ });
+  }, [token]);
 
   const login = useCallback(async (phone: string, otp: string): Promise<UserInfo> => {
     setIsLoading(true);

@@ -55,8 +55,8 @@ export const creativeService = {
   getPrompts: (category?: string) =>
     api.get<{ data: Prompt[] }>('/creatives/prompts', { category }),
 
-  generateCaptions: (prompt: string, platforms: string[], imageId?: string) =>
-    api.post<AIGenerationResponse>('/creatives/generate', { prompt, platforms, image_id: imageId }),
+  generateCaptions: (prompt: string, platforms: string[], imageId?: string, force?: boolean) =>
+    api.post<AIGenerationResponse>('/creatives/generate', { prompt, platforms, image_id: imageId, force }),
 
   getTemplates: (category?: string) =>
     api.get<{ items: unknown[] }>('/creatives/templates', { category }),

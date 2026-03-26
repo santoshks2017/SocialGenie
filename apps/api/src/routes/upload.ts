@@ -1,9 +1,10 @@
 import type { FastifyInstance } from 'fastify';
 import { randomUUID } from 'crypto';
-import { mkdir, writeFile } from 'fs/promises';
+import { mkdir } from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { dirname } from 'path';
+import { uploadFile } from '../lib/storage.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -30,10 +31,9 @@ export default async function uploadRoutes(fastify: FastifyInstance) {
     await mkdir(ORIGINALS_DIR, { recursive: true });
     const filename = `${randomUUID()}${ext}`;
     const buffer = await data.toBuffer();
-    await writeFile(path.join(ORIGINALS_DIR, filename), buffer);
+    const url = await uploadFile(buffer, `originals/${filename}`, data.mimetype || 'image/jpeg', ORIGINALS_DIR);
 
-    const baseUrl = process.env['API_BASE_URL'] ?? 'http://localhost:3001';
-    return { id: filename, url: `${baseUrl}/uploads/originals/${filename}` };
+    return { id: filename, url };
   });
 
   // POST /v1/upload/video
@@ -51,9 +51,8 @@ export default async function uploadRoutes(fastify: FastifyInstance) {
     await mkdir(ORIGINALS_DIR, { recursive: true });
     const filename = `${randomUUID()}${ext}`;
     const buffer = await data.toBuffer();
-    await writeFile(path.join(ORIGINALS_DIR, filename), buffer);
+    const url = await uploadFile(buffer, `originals/${filename}`, data.mimetype || 'video/mp4', ORIGINALS_DIR);
 
-    const baseUrl = process.env['API_BASE_URL'] ?? 'http://localhost:3001';
-    return { id: filename, url: `${baseUrl}/uploads/originals/${filename}` };
+    return { id: filename, url };
   });
 }
