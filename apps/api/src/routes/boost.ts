@@ -1,6 +1,7 @@
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '../db/prisma.js';
 import type { BoostCampaign } from '../generated/client/index.js';
+import { Prisma } from '../generated/client/index.js';
 
 function mapCampaign(c: BoostCampaign) {
   return {
@@ -88,7 +89,7 @@ export default async function boostRoutes(fastify: FastifyInstance) {
         post_id: body.postId,
         daily_budget: body.dailyBudget,
         duration_days: body.durationDays,
-        targeting_spec: body.targeting ?? {},
+        targeting_spec: (body.targeting ?? {}) as Prisma.InputJsonValue,
         start_date: startDate,
         end_date: endDate,
         status: 'draft',

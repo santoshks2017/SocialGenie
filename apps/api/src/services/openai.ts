@@ -1,45 +1,45 @@
-import OpenAI from 'openai';
+import OpenAI from "openai"
 
-let client: OpenAI | null = null;
+let client: OpenAI | null = null
 
 function getClient(): OpenAI {
   if (!client) {
-    const apiKey = process.env['OPENAI_API_KEY'];
-    if (!apiKey) throw new Error('OPENAI_API_KEY is not set');
-    client = new OpenAI({ apiKey });
+    const apiKey = process.env["OPENAI_API_KEY"]
+    if (!apiKey) throw new Error("OPENAI_API_KEY is not set")
+    client = new OpenAI({ apiKey })
   }
-  return client;
+  return client
 }
 
 export interface DealerContext {
-  name: string;
-  city: string;
-  brands: string[];
-  phone: string;
-  whatsapp: string;
-  language_preferences: string[];
+  name: string
+  city: string
+  brands: string[]
+  phone: string
+  whatsapp: string
+  language_preferences: string[]
 }
 
 export interface InventoryContext {
-  make?: string;
-  model?: string;
-  variant?: string;
-  price?: number;
-  features?: string[];
-  stock_count?: number;
+  make?: string
+  model?: string
+  variant?: string
+  price?: number
+  features?: string[]
+  stock_count?: number
 }
 
 export interface CaptionVariant {
-  caption_text: string;
-  hashtags: string[];
-  suggested_emoji: string[];
-  platform_notes: string;
-  style: 'punchy' | 'detailed' | 'emotional';
+  caption_text: string
+  hashtags: string[]
+  suggested_emoji: string[]
+  platform_notes: string
+  style: "punchy" | "detailed" | "emotional"
 }
 
 export interface GeneratedCaptions {
-  variants: [CaptionVariant, CaptionVariant, CaptionVariant];
-  hindi_variants?: [string, string, string];
+  variants: [CaptionVariant, CaptionVariant, CaptionVariant]
+  hindi_variants?: [string, string, string]
 }
 
 const SYSTEM_PROMPT = `You are a social media marketing expert for Indian automobile dealerships.
@@ -64,63 +64,70 @@ OUTPUT FORMAT (valid JSON only, no markdown fences):
     { "caption_text": "...", "hashtags": ["#tag1",...], "suggested_emoji": ["✨"], "platform_notes": "...", "style": "detailed" },
     { "caption_text": "...", "hashtags": ["#tag1",...], "suggested_emoji": ["❤️"], "platform_notes": "...", "style": "emotional" }
   ]
-}`;
+}`
 
 export async function generateCaptions(
   prompt: string,
   dealer: DealerContext,
   inventory?: InventoryContext,
   festivalContext?: string,
+  includeHindi = false,
 ): Promise<GeneratedCaptions> {
-  const openai = getClient();
+  const openai = getClient()
 
   const vehicleBlock = inventory
     ? `VEHICLE CONTEXT:
-- Make/Model: ${inventory.make ?? ''} ${inventory.model ?? ''} ${inventory.variant ?? ''}
-- Price: ${inventory.price ? `₹${(inventory.price / 100000).toFixed(2)} Lakhs (exact — do not approximate)` : 'not provided — omit pricing'}
-- Key Features: ${inventory.features?.join(', ') ?? 'not provided'}
-- Stock: ${inventory.stock_count ?? 'available'} units`
-    : 'VEHICLE CONTEXT: Not provided — use prompt details only.';
+- Make/Model: ${inventory.make ?? ""} ${inventory.model ?? ""} ${inventory.variant ?? ""}
+- Price: ${inventory.price ? `₹${(inventory.price / 100000).toFixed(2)} Lakhs (exact — do not approximate)` : "not provided — omit pricing"}
+- Key Features: ${inventory.features?.join(", ") ?? "not provided"}
+- Stock: ${inventory.stock_count ?? "available"} units`
+    : "VEHICLE CONTEXT: Not provided — use prompt details only."
 
   const userMessage = `DEALER CONTEXT:
 - Name: ${dealer.name}
 - City: ${dealer.city}
-- Brand(s): ${dealer.brands.join(', ')}
+- Brand(s): ${dealer.brands.join(", ")}
 - Phone: ${dealer.phone}
 - WhatsApp: ${dealer.whatsapp}
 
 ${vehicleBlock}
-${festivalContext ? `\nFESTIVAL CONTEXT: ${festivalContext}` : ''}
+${festivalContext ? `\nFESTIVAL CONTEXT: ${festivalContext}` : ""}
 
 DEALER PROMPT: "${prompt}"
 
-Generate 3 caption variants as specified.`;
+Generate 3 caption variants as specified.`
 
   const response = await openai.chat.completions.create({
-    model: 'gpt-4o',
+    model: "gpt-4o",
     messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
-      { role: 'user', content: userMessage },
+      { role: "system", content: SYSTEM_PROMPT },
+      { role: "user", content: userMessage },
     ],
     temperature: 0.8,
     max_tokens: 1500,
-    response_format: { type: 'json_object' },
-  });
+    response_format: { type: "json_object" },
+  })
 
-  const content = response.choices[0]?.message?.content;
-  if (!content) throw new Error('Empty response from OpenAI');
+  const content = response.choices[0]?.message?.content
+  if (!content) throw new Error("Empty response from OpenAI")
 
-  const parsed = JSON.parse(content) as { variants: [CaptionVariant, CaptionVariant, CaptionVariant] };
+  const parsed = JSON.parse(content) as {
+    variants: [CaptionVariant, CaptionVariant, CaptionVariant]
+  }
 
-  // Generate Hindi variants if dealer has Hindi preference
-  let hindi_variants: [string, string, string] | undefined;
-  if (dealer.language_preferences.includes('hi')) {
-    hindi_variants = await generateHindiVariants(openai, parsed.variants, dealer);
+  // Generate Hindi variants if requested or dealer prefers Hindi
+  let hindi_variants: [string, string, string] | undefined
+  if (includeHindi || dealer.language_preferences.includes("hi")) {
+    hindi_variants = await generateHindiVariants(
+      openai,
+      parsed.variants,
+      dealer,
+    )
   }
 
   return hindi_variants
     ? { variants: parsed.variants, hindi_variants }
-    : { variants: parsed.variants };
+    : { variants: parsed.variants }
 }
 
 async function generateHindiVariants(
@@ -129,10 +136,10 @@ async function generateHindiVariants(
   dealer: DealerContext,
 ): Promise<[string, string, string]> {
   const response = await openai.chat.completions.create({
-    model: 'gpt-4o',
+    model: "gpt-4o",
     messages: [
       {
-        role: 'system',
+        role: "system",
         content: `You are a Hindi copywriter for Indian automobile dealerships in ${dealer.city}.
 Generate captions NATIVELY in Hindi — do NOT translate from English.
 Use idioms, phrasing, and expressions natural to Hindi-speaking automobile buyers.
@@ -140,40 +147,44 @@ Keep the same intent and call-to-action as the English version.
 Return JSON: { "hi_0": "...", "hi_1": "...", "hi_2": "..." }`,
       },
       {
-        role: 'user',
+        role: "user",
         content: `Create Hindi versions of these 3 captions for ${dealer.name}, ${dealer.city}:
-0: ${variants[0]?.caption_text ?? ''}
-1: ${variants[1]?.caption_text ?? ''}
-2: ${variants[2]?.caption_text ?? ''}`,
+0: ${variants[0]?.caption_text ?? ""}
+1: ${variants[1]?.caption_text ?? ""}
+2: ${variants[2]?.caption_text ?? ""}`,
       },
     ],
     temperature: 0.7,
     max_tokens: 1000,
-    response_format: { type: 'json_object' },
-  });
+    response_format: { type: "json_object" },
+  })
 
-  const content = response.choices[0]?.message?.content;
-  if (!content) return ['', '', ''];
-  const parsed = JSON.parse(content) as { hi_0: string; hi_1: string; hi_2: string };
-  return [parsed.hi_0 ?? '', parsed.hi_1 ?? '', parsed.hi_2 ?? ''];
+  const content = response.choices[0]?.message?.content
+  if (!content) return ["", "", ""]
+  const parsed = JSON.parse(content) as {
+    hi_0: string
+    hi_1: string
+    hi_2: string
+  }
+  return [parsed.hi_0 ?? "", parsed.hi_1 ?? "", parsed.hi_2 ?? ""]
 }
 
 export async function generateInboxReply(
   messageText: string,
   sentiment: string,
   dealer: DealerContext,
-  messageType: 'comment' | 'dm' | 'review',
+  messageType: "comment" | "dm" | "review",
   inventory?: { make: string; model: string; price?: number }[],
 ): Promise<string> {
-  const openai = getClient();
+  const openai = getClient()
 
-  const maxWords = messageType === 'comment' ? 80 : 180;
+  const maxWords = messageType === "comment" ? 80 : 180
 
   const response = await openai.chat.completions.create({
-    model: 'gpt-4o',
+    model: "gpt-4o",
     messages: [
       {
-        role: 'system',
+        role: "system",
         content: `You are a helpful customer service assistant for ${dealer.name}, an automobile dealership in ${dealer.city}.
 
 RULES:
@@ -189,13 +200,13 @@ RULES:
 Return only the reply text — no JSON, no labels.`,
       },
       {
-        role: 'user',
-        content: `Customer ${messageType}: "${messageText}"${inventory && inventory.length > 0 ? `\n\nAvailable inventory context: ${inventory.map((i) => `${i.make} ${i.model}${i.price ? ` at ₹${(i.price / 100000).toFixed(2)}L` : ''}`).join(', ')}` : ''}`,
+        role: "user",
+        content: `Customer ${messageType}: "${messageText}"${inventory && inventory.length > 0 ? `\n\nAvailable inventory context: ${inventory.map((i) => `${i.make} ${i.model}${i.price ? ` at ₹${(i.price / 100000).toFixed(2)}L` : ""}`).join(", ")}` : ""}`,
       },
     ],
     temperature: 0.6,
     max_tokens: 300,
-  });
+  })
 
-  return response.choices[0]?.message?.content?.trim() ?? '';
+  return response.choices[0]?.message?.content?.trim() ?? ""
 }

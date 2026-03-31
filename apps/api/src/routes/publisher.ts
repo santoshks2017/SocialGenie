@@ -11,7 +11,7 @@ export default async function publisherRoutes(fastify: FastifyInstance) {
       preHandler: [fastify.authenticate],
     },
     async (request, reply) => {
-      const dealer_id = request.user.dealer_id
+      const dealer_id = request.user.dealer_id!
       const body = request.body as {
         promptText: string
         captionText?: string
@@ -21,14 +21,12 @@ export default async function publisherRoutes(fastify: FastifyInstance) {
       }
 
       if (!body.promptText || !body.platforms?.length) {
-        return reply
-          .code(400)
-          .send({
-            error: {
-              code: "INVALID_INPUT",
-              message: "promptText and platforms are required",
-            },
-          })
+        return reply.code(400).send({
+          error: {
+            code: "INVALID_INPUT",
+            message: "promptText and platforms are required",
+          },
+        })
       }
 
       const post = await prisma.post.create({
@@ -47,6 +45,137 @@ export default async function publisherRoutes(fastify: FastifyInstance) {
     },
   )
 
+  // GET /v1/publisher/posts — list dealer posts
+  fastify.get(
+    "/posts",
+    {
+      preHandler: [fastify.authenticate],
+    },
+    async (request) => {
+      const dealer_id = request.user.dealer_id!
+      const {
+        page = "1",
+        pageSize = "20",
+        status,
+      } = request.query as Record<string, string>
+      const pageNumber = Math.max(1, parseInt(page, 10) || 1)
+      const pageSizeNumber = Math.max(
+        1,
+        Math.min(100, parseInt(pageSize, 10) || 20),
+      )
+      const skip = (pageNumber - 1) * pageSizeNumber
+
+      const where: Record<string, unknown> = { dealer_id }
+      if (status) where.status = status
+
+      const [data, total] = await Promise.all([
+        prisma.post.findMany({
+          where,
+          orderBy: [{ created_at: "desc" }],
+          skip,
+          take: pageSizeNumber,
+        }),
+        prisma.post.count({ where }),
+      ])
+
+      return {
+        success: true,
+        data,
+        total,
+        page: pageNumber,
+        pageSize: pageSizeNumber,
+      }
+    },
+  )
+
+  // GET /v1/publisher/posts/:id — fetch a single post
+  fastify.get(
+    "/posts/:id",
+    {
+      preHandler: [fastify.authenticate],
+    },
+    async (request, reply) => {
+      const dealer_id = request.user.dealer_id!
+      const { id } = request.params as { id: string }
+      const post = await prisma.post.findFirst({ where: { id, dealer_id } })
+      if (!post)
+        return reply
+          .code(404)
+          .send({ error: { code: "NOT_FOUND", message: "Post not found" } })
+      return { success: true, data: post }
+    },
+  )
+
+  // PATCH /v1/publisher/posts/:id — update an existing draft or scheduled post
+  fastify.patch(
+    "/posts/:id",
+    {
+      preHandler: [fastify.authenticate],
+    },
+    async (request, reply) => {
+      const dealer_id = request.user.dealer_id!
+      const { id } = request.params as { id: string }
+      const body = request.body as Partial<{
+        promptText: string
+        captionText: string
+        captionHashtags: string[]
+        creativeUrls: Record<string, string>
+        platforms: string[]
+        status: string
+        scheduled_at: string
+      }>
+
+      const updateData: Record<string, unknown> = {}
+      if (body.promptText !== undefined)
+        updateData.prompt_text = body.promptText
+      if (body.captionText !== undefined)
+        updateData.caption_text = body.captionText
+      if (body.captionHashtags !== undefined)
+        updateData.caption_hashtags = body.captionHashtags
+      if (body.creativeUrls !== undefined)
+        updateData.creative_urls = body.creativeUrls
+      if (body.platforms !== undefined) updateData.platforms = body.platforms
+      if (body.status !== undefined) updateData.status = body.status
+      if (body.scheduled_at !== undefined)
+        updateData.scheduled_at = body.scheduled_at
+          ? new Date(body.scheduled_at)
+          : null
+
+      const updated = await prisma.post.updateMany({
+        where: { id, dealer_id },
+        data: updateData,
+      })
+      if (updated.count === 0)
+        return reply
+          .code(404)
+          .send({ error: { code: "NOT_FOUND", message: "Post not found" } })
+
+      const post = await prisma.post.findFirst({ where: { id, dealer_id } })
+      return { success: true, item: post }
+    },
+  )
+
+  // GET /v1/publisher/posts/:id/metrics — return stored metrics for a post
+  fastify.get(
+    "/posts/:id/metrics",
+    {
+      preHandler: [fastify.authenticate],
+    },
+    async (request, reply) => {
+      const dealer_id = request.user.dealer_id!
+      const { id } = request.params as { id: string }
+      const post = await prisma.post.findFirst({
+        where: { id, dealer_id },
+        select: { metrics: true },
+      })
+      if (!post)
+        return reply
+          .code(404)
+          .send({ error: { code: "NOT_FOUND", message: "Post not found" } })
+      return { success: true, metrics: post.metrics ?? {} }
+    },
+  )
+
   // POST /v1/publisher/publish  — publish immediately or schedule
   fastify.post(
     "/publish",
@@ -54,7 +183,7 @@ export default async function publisherRoutes(fastify: FastifyInstance) {
       preHandler: [fastify.authenticate],
     },
     async (request, reply) => {
-      const dealer_id = request.user.dealer_id
+      const dealer_id = request.user.dealer_id!
       const { post_id, platforms, scheduled_at } = request.body as {
         post_id: string
         platforms: string[]
@@ -62,14 +191,12 @@ export default async function publisherRoutes(fastify: FastifyInstance) {
       }
 
       if (!post_id || !platforms?.length) {
-        return reply
-          .code(400)
-          .send({
-            error: {
-              code: "INVALID_INPUT",
-              message: "post_id and platforms are required",
-            },
-          })
+        return reply.code(400).send({
+          error: {
+            code: "INVALID_INPUT",
+            message: "post_id and platforms are required",
+          },
+        })
       }
 
       // Verify the post belongs to this dealer
@@ -188,7 +315,7 @@ export default async function publisherRoutes(fastify: FastifyInstance) {
       preHandler: [fastify.authenticate],
     },
     async (request, _reply) => {
-      const dealer_id = request.user.dealer_id
+      const dealer_id = request.user.dealer_id!
       const { from, to } = request.query as { from?: string; to?: string }
 
       const dateRange =
@@ -236,7 +363,7 @@ export default async function publisherRoutes(fastify: FastifyInstance) {
       preHandler: [fastify.authenticate],
     },
     async (request, reply) => {
-      const dealer_id = request.user.dealer_id
+      const dealer_id = request.user.dealer_id!
       const { postId } = request.params as { postId: string }
 
       const post = await prisma.post.findFirst({
@@ -247,14 +374,12 @@ export default async function publisherRoutes(fastify: FastifyInstance) {
           .code(404)
           .send({ error: { code: "NOT_FOUND", message: "Post not found" } })
       if (post.status === "published") {
-        return reply
-          .code(400)
-          .send({
-            error: {
-              code: "ALREADY_PUBLISHED",
-              message: "Cannot cancel a published post",
-            },
-          })
+        return reply.code(400).send({
+          error: {
+            code: "ALREADY_PUBLISHED",
+            message: "Cannot cancel a published post",
+          },
+        })
       }
 
       // Remove pending jobs from queue

@@ -156,7 +156,7 @@ export default function Onboarding() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-      <h1 className="text-2xl font-bold text-[#1A1A2E] mb-8">Cardeko Social AI</h1>
+      <h1 className="text-2xl font-bold text-[#1A1A2E] mb-8">CarDekho Social</h1>
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>Onboarding</CardTitle>

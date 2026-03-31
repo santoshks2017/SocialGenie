@@ -26,7 +26,7 @@ export async function registerActivityLog(fastify: FastifyInstance) {
     if (reply.statusCode >= 400) return;
 
     const method = request.method.toUpperCase();
-    const url = request.url.split('?')[0];
+    const url = request.url.split('?')[0] ?? request.url;
 
     const match = ACTION_MAP.find((a) => a.method === method && a.pattern.test(url));
     if (!match) return;
@@ -37,9 +37,9 @@ export async function registerActivityLog(fastify: FastifyInstance) {
 
     // Extract entity_id from URL path (last segment if it looks like a UUID)
     const segments = url.split('/').filter(Boolean);
-    const lastSegment = segments[segments.length - 1];
+    const lastSegment = segments[segments.length - 1] ?? '';
     const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    const entity_id = uuidPattern.test(lastSegment) ? lastSegment : undefined;
+    const entity_id = lastSegment && uuidPattern.test(lastSegment) ? lastSegment : undefined;
 
     try {
       await prisma.activityLog.create({

@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { NavLink, useSearchParams } from 'react-router-dom';
 import { creativeService, postService } from '../services/creative';
-import type { AIGenerationResponse } from '../services/creative';
+import type { AIGenerationResponse, CaptionVariant } from '../services/creative';
 import { useToast } from '../components/ui/Toast';
+import { generateImage } from '../services/imageGeneration';
 import {
   Tag, Sparkles, Heart, Gift, PenLine,
   ArrowLeft, RefreshCw, Check, ImagePlus, Video, X,
@@ -93,6 +94,8 @@ export default function CreatePost() {
   const [uploadedVideoName, setUploadedVideoName] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [toneActive, setToneActive] = useState<'hinglish' | 'english' | 'hindi'>('hinglish');
+  const [aiImageUrls, setAiImageUrls] = useState<(string | null)[]>([null, null, null]);
+  const [isGeneratingImages, setIsGeneratingImages] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const { addToast } = useToast();
@@ -156,10 +159,22 @@ export default function CreatePost() {
     setUploadedVideoName(null);
   };
 
+  const generateImagesForVariants = (captions: CaptionVariant[], currentPrompt: string) => {
+    setIsGeneratingImages(true);
+    setAiImageUrls([null, null, null]);
+    const slots = captions.slice(0, 3);
+    Promise.allSettled(
+      slots.map((v) => generateImage(v.caption_text, currentPrompt)),
+    ).then((results) => {
+      setAiImageUrls(results.map((r) => (r.status === 'fulfilled' ? r.value : null)));
+      setIsGeneratingImages(false);
+    });
+  };
+
   const handleGenerate = async (force = false) => {
     if (!prompt.trim()) return;
     setIsGenerating(true);
-    if (!force) { setVariants(null); setPublished(false); }
+    if (!force) { setVariants(null); setPublished(false); setAiImageUrls([null, null, null]); }
     try {
       const res = await creativeService.generateCaptions(
         prompt, selectedPlatforms, uploadedImageId ?? undefined, force,
@@ -167,6 +182,8 @@ export default function CreatePost() {
       setVariants(res);
       setSelectedVariant(0);
       setCaption(res.captions[0]?.caption_text ?? '');
+      // Fire image generation in parallel — images sync with captions
+      generateImagesForVariants(res.captions, prompt);
     } catch (err) {
       console.error(err);
       addToast({ type: 'error', title: 'Generation failed', message: 'Could not generate captions. Check API logs.' });
@@ -454,6 +471,7 @@ export default function CreatePost() {
               <div className="grid grid-cols-4 gap-3">
                 {TEMPLATE_THEMES.map((theme, i) => {
                   const creative = variants?.creatives[i];
+                  const aiImg = i < 3 ? aiImageUrls[i] : null;
                   return (
                     <button
                       key={i}
@@ -464,7 +482,13 @@ export default function CreatePost() {
                           : 'border-transparent hover:border-stone-300'
                       }`}
                     >
-                      {creative?.thumbnail_url ? (
+                      {aiImg ? (
+                        <img src={aiImg} alt={theme.label} className="w-full aspect-square object-cover" />
+                      ) : isGeneratingImages && i < 3 ? (
+                        <div className={`aspect-square bg-gradient-to-br ${theme.gradient} flex items-center justify-center`}>
+                          <Sparkles className="w-4 h-4 text-white/60 animate-pulse" />
+                        </div>
+                      ) : creative?.thumbnail_url ? (
                         <img src={creative.thumbnail_url} alt={theme.label} className="w-full aspect-square object-cover" />
                       ) : (
                         <div className={`aspect-square bg-gradient-to-br ${theme.gradient} flex flex-col items-center justify-center p-2.5`}>
@@ -641,8 +665,20 @@ export default function CreatePost() {
                 </div>
               </div>
 
-              {/* Creative preview */}
-              {currentCreative?.thumbnail_url ? (
+              {/* Creative preview — AI image takes priority over template thumbnail */}
+              {aiImageUrls[selectedVariant] ? (
+                <div className="relative">
+                  <img src={aiImageUrls[selectedVariant]!} alt="AI Generated" className="w-full aspect-square object-cover" />
+                  <span className="absolute top-1.5 left-1.5 flex items-center gap-1 bg-black/60 text-white text-[9px] font-bold px-2 py-0.5 rounded-full">
+                    <Sparkles className="w-2.5 h-2.5" /> AI
+                  </span>
+                </div>
+              ) : isGeneratingImages ? (
+                <div className="w-full aspect-square bg-stone-100 flex flex-col items-center justify-center gap-2">
+                  <Sparkles className="w-5 h-5 text-orange-400 animate-pulse" />
+                  <p className="text-[10px] text-stone-400 font-semibold">Generating image...</p>
+                </div>
+              ) : currentCreative?.thumbnail_url ? (
                 <img src={currentCreative.thumbnail_url} alt="Creative" className="w-full aspect-square object-cover" />
               ) : (
                 <div

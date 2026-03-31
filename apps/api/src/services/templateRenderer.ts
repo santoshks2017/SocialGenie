@@ -51,7 +51,7 @@ function x(s: string): string {
 function hexRgb(hex: string): [number, number, number] {
   const m = hex.replace('#', '').match(/[0-9a-f]{2}/gi);
   if (!m || m.length < 3) return [24, 119, 242];
-  return [parseInt(m[0], 16), parseInt(m[1], 16), parseInt(m[2], 16)];
+  return [parseInt(m[0]!, 16), parseInt(m[1]!, 16), parseInt(m[2]!, 16)];
 }
 
 // Format price in paise to display string (uses XML entity for ₹)

@@ -9,7 +9,7 @@ export default async function dealerRoutes(fastify: FastifyInstance) {
     preHandler: [fastify.authenticate],
   }, async (request, _reply) => {
     const dealer = await prisma.dealer.findUnique({
-      where: { id: request.user.dealer_id },
+      where: { id: request.user.dealer_id! },
       include: { platform_connections: { select: { platform: true, platform_account_name: true, is_connected: true, token_expires_at: true } } },
     });
     if (!dealer) return { error: { code: 'NOT_FOUND', message: 'Dealer not found' } };
@@ -20,7 +20,7 @@ export default async function dealerRoutes(fastify: FastifyInstance) {
   fastify.put('/profile', {
     preHandler: [fastify.authenticate],
   }, async (request, _reply) => {
-    const dealer_id = request.user.dealer_id;
+    const dealer_id = request.user.dealer_id!;
     const body = request.body as {
       name?: string;
       city?: string;
@@ -59,7 +59,7 @@ export default async function dealerRoutes(fastify: FastifyInstance) {
   fastify.post('/onboarding/complete', {
     preHandler: [fastify.authenticate],
   }, async (request, _reply) => {
-    const dealer_id = request.user.dealer_id;
+    const dealer_id = request.user.dealer_id!;
     const updated = await prisma.dealer.update({
       where: { id: dealer_id },
       data: { onboarding_completed: true, onboarding_step: 5 },
@@ -71,7 +71,7 @@ export default async function dealerRoutes(fastify: FastifyInstance) {
   fastify.patch('/onboarding/step', {
     preHandler: [fastify.authenticate],
   }, async (request, _reply) => {
-    const dealer_id = request.user.dealer_id;
+    const dealer_id = request.user.dealer_id!;
     const { step } = request.body as { step: number };
     const updated = await prisma.dealer.update({
       where: { id: dealer_id },
@@ -84,7 +84,7 @@ export default async function dealerRoutes(fastify: FastifyInstance) {
   fastify.get('/dashboard', {
     preHandler: [fastify.authenticate],
   }, async (request, _reply) => {
-    const dealer_id = request.user.dealer_id;
+    const dealer_id = request.user.dealer_id!;
     const now = new Date();
     const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
     const weekStart = new Date(now); weekStart.setDate(now.getDate() - 7);

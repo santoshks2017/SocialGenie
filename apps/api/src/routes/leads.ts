@@ -73,14 +73,14 @@ export default async function leadsRoutes(fastify: FastifyInstance) {
       data: {
         dealer_id,
         customer_name: body.customerName,
-        customer_phone: body.customerPhone,
-        source_platform: body.sourcePlatform,
+        ...(body.customerPhone !== undefined ? { customer_phone: body.customerPhone } : {}),
+        ...(body.sourcePlatform !== undefined ? { source_platform: body.sourcePlatform } : {}),
         source_type: body.sourceType ?? 'inbox',
-        source_post_id: body.sourcePostId,
-        source_campaign_id: body.sourceCampaignId,
-        source_message_id: body.sourceMessageId,
-        vehicle_interest: body.vehicleInterest,
-        notes: body.notes,
+        ...(body.sourcePostId !== undefined ? { source_post_id: body.sourcePostId } : {}),
+        ...(body.sourceCampaignId !== undefined ? { source_campaign_id: body.sourceCampaignId } : {}),
+        ...(body.sourceMessageId !== undefined ? { source_message_id: body.sourceMessageId } : {}),
+        ...(body.vehicleInterest !== undefined ? { vehicle_interest: body.vehicleInterest } : {}),
+        ...(body.notes !== undefined ? { notes: body.notes } : {}),
       },
     });
 

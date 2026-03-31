@@ -93,7 +93,7 @@ export default async function usersRoutes(fastify: FastifyInstance) {
         dealer_id,
         invited_by: user.dealer_user_id,
         is_active: true,
-        permissions: role === ROLES.USER && body.permissions ? body.permissions : undefined,
+        ...(role === ROLES.USER && body.permissions ? { permissions: body.permissions } : {}),
       },
     });
 

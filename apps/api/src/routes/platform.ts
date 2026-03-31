@@ -17,7 +17,7 @@ export default async function platformRoutes(fastify: FastifyInstance) {
     preHandler: [fastify.authenticate],
   }, async (request, _reply) => {
     const connections = await prisma.platformConnection.findMany({
-      where: { dealer_id: request.user.dealer_id },
+      where: { dealer_id: request.user.dealer_id! },
     });
     return { success: true, platforms: connections };
   });
@@ -168,7 +168,7 @@ export default async function platformRoutes(fastify: FastifyInstance) {
   fastify.delete('/:platform', {
     preHandler: [fastify.authenticate],
   }, async (request, _reply) => {
-    const dealer_id = request.user.dealer_id;
+    const dealer_id = request.user.dealer_id!;
     const { platform } = request.params as { platform: string };
     await prisma.platformConnection.updateMany({
       where: { dealer_id, platform },
