@@ -326,6 +326,97 @@ export default async function creativeRoutes(fastify: FastifyInstance) {
     },
   )
 
+  // POST /v1/creatives/generate-branded  (AI image + Sharp template composite → branded creative URL)
+  fastify.post(
+    "/generate-branded",
+    { preHandler: [fastify.authenticate] },
+    async (request, reply) => {
+      const dealer_id = request.user.dealer_id as string
+      const body = request.body as {
+        headline: string
+        template_index?: 0 | 1 | 2
+      }
+
+      if (!body.headline?.trim()) {
+        return reply.code(400).send({
+          error: { code: "INVALID_INPUT", message: "headline is required" },
+        })
+      }
+
+      if (!isCloudflareAvailable()) {
+        return reply.code(503).send({
+          error: {
+            code: "SERVICE_UNAVAILABLE",
+            message: "AI image generation not configured",
+          },
+        })
+      }
+
+      const dealer = await prisma.dealer.findUnique({ where: { id: dealer_id } })
+      if (!dealer)
+        return reply
+          .code(404)
+          .send({ error: { code: "NOT_FOUND", message: "Dealer not found" } })
+
+      const imagePrompt =
+        `Professional automotive photography for Indian car dealership. ` +
+        `${body.headline.slice(0, 120)}. ` +
+        `Photorealistic, cinematic lighting, 4K quality, no text overlay, ` +
+        `clean background, showroom or open road setting.`
+
+      try {
+        const imageBuffer = await cfGenerateImage(imagePrompt.slice(0, 500))
+        const filePrefix = randomUUID()
+
+        const rendered = await renderCreatives({
+          imageBuffer,
+          headline: body.headline,
+          dealerName: dealer.name,
+          city: dealer.city,
+          phone: dealer.contact_phone ?? dealer.phone,
+          whatsapp:
+            dealer.whatsapp_number ?? dealer.contact_phone ?? dealer.phone,
+          address: [dealer.city, dealer.state].filter(Boolean).join(", "),
+          primaryColor: dealer.primary_color ?? "#1877F2",
+          outputDir: CREATIVES_DIR,
+          filePrefix,
+        })
+
+        const templateFiles = [
+          rendered.boldBanner,
+          rendered.minimalShowcase,
+          rendered.offerCard,
+        ] as const
+        const templateNames = [
+          "Bold Banner",
+          "Minimal Showcase",
+          "Offer Card",
+        ] as const
+        const idx = Math.min(body.template_index ?? 0, 2) as 0 | 1 | 2
+        const targetFile = templateFiles[idx]
+        const templateName = templateNames[idx]
+
+        const buf = await readFile(path.join(CREATIVES_DIR, targetFile))
+        const url = await uploadFile(
+          buf,
+          `creatives/${targetFile}`,
+          "image/jpeg",
+          CREATIVES_DIR,
+        )
+
+        return { url, template_name: templateName }
+      } catch (err) {
+        fastify.log.error(err, "AI branded creative generation failed")
+        return reply.code(500).send({
+          error: {
+            code: "AI_ERROR",
+            message: "Creative generation failed. Please try again.",
+          },
+        })
+      }
+    },
+  )
+
   // POST /v1/creatives/generate-image  (Cloudflare Workers AI fallback for image generation)
   fastify.post(
     "/generate-image",
