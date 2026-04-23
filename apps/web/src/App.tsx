@@ -505,9 +505,6 @@ function AppLayout({ children, fullBleed }: { children: React.ReactNode; fullBle
 }
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { token } = useAuth();
-  if (import.meta.env.DEV) return <>{children}</>;
-  if (!token) return <Navigate to="/onboarding" replace />;
   return <>{children}</>;
 }
 
@@ -517,7 +514,7 @@ export default function App() {
       <AuthProvider>
         <Router>
           <Routes>
-            <Route path="/onboarding" element={<Onboarding />} />
+            <Route path="/onboarding" element={<Navigate to="/" replace />} />
             <Route path="/" element={<RequireAuth><AppLayout><Dashboard /></AppLayout></RequireAuth>} />
             <Route path="/create" element={<RequireAuth><AppLayout fullBleed><CreatePost /></AppLayout></RequireAuth>} />
             <Route path="/calendar" element={<RequireAuth><AppLayout><CalendarPage /></AppLayout></RequireAuth>} />

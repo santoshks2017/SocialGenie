@@ -14,11 +14,22 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+// Shown when auth is bypassed and no real user is logged in
+const DEMO_USER: UserInfo = {
+  id: 'demo',
+  name: 'Demo User',
+  role: 'owner',
+  dealer_id: null,
+  permissions: {},
+  onboarding_completed: true,
+  onboarding_step: 4,
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('access_token'));
   const [user, setUser] = useState<UserInfo | null>(() => {
     const stored = localStorage.getItem('user_info');
-    return stored ? JSON.parse(stored) : null;
+    return stored ? (JSON.parse(stored) as UserInfo) : DEMO_USER;
   });
   const [isLoading, setIsLoading] = useState(false);
 
