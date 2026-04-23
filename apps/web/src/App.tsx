@@ -1,8 +1,9 @@
-import { BrowserRouter as Router, Routes, Route, NavLink, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom';
 import {
-  Car, Plus, MessageSquare, Bell, Menu, X,
+  Car, Plus, MessageSquare, Bell,
   Calendar, BarChart2, Package, Zap, Settings,
   ChevronRight, Send, RefreshCw, Star, Check, Sparkles,
+  LayoutDashboard, Video, LogOut, Menu, X,
 } from 'lucide-react';
 import React, { useState, useEffect } from 'react';
 import api from './services/api';
@@ -18,157 +19,201 @@ import BoostPage from './pages/Boost';
 import AnalyticsPage from './pages/Analytics';
 import SettingsPage from './pages/SettingsPage';
 
-// ─── TopNav ──────────────────────────────────────────────────────────────────
-function TopNav({ onMenuToggle }: { onMenuToggle: () => void }) {
-  const { user } = useAuth();
+// ─── Nav config ───────────────────────────────────────────────────────────────
+const NAV_ITEMS = [
+  { to: '/',          icon: LayoutDashboard, label: 'Dashboard',  exact: true },
+  { to: '/calendar',  icon: Calendar,        label: 'Calendar'               },
+  { to: '/analytics', icon: BarChart2,       label: 'Analytics'              },
+  { to: '/inbox',     icon: MessageSquare,   label: 'Inbox',      badge: 4   },
+  { to: '/inventory', icon: Package,         label: 'Inventory'              },
+  { to: '/boost',     icon: Zap,             label: 'Boost'                  },
+  { to: '/create',    icon: Video,           label: 'AI Video',   isNew: true },
+];
+
+// ─── Sidebar ──────────────────────────────────────────────────────────────────
+function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose: () => void }) {
+  const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const initials = user?.name
     ? user.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()
     : 'U';
 
-  return (
-    <header className="sticky top-0 z-50 bg-white border-b border-stone-200 h-14 flex items-center px-5 gap-1 shrink-0">
-      <NavLink to="/" className="flex items-center gap-2 mr-4 flex-shrink-0">
-        <div className="w-8 h-8 bg-stone-900 rounded-xl flex items-center justify-center">
-          <Car className="w-4 h-4 text-white" />
-        </div>
-        <span className="font-extrabold text-stone-900 tracking-tight text-sm">
-          CarDekho <span className="text-orange-600">Social</span>
-        </span>
-      </NavLink>
+  const handleLogout = () => { logout(); navigate('/onboarding'); };
 
-      {/* Desktop inline nav */}
-      <nav className="hidden md:flex items-center gap-0.5">
-        {[
-          { to: '/', label: 'Dashboard', exact: true },
-          { to: '/calendar', label: 'Calendar' },
-          { to: '/analytics', label: 'Analytics' },
-          { to: '/inventory', label: 'Inventory' },
-          { to: '/boost', label: 'Boost' },
-        ].map(({ to, label, exact }) => (
+  const sidebarContent = (
+    <div className="flex flex-col h-full">
+      {/* Logo */}
+      <div className="h-16 flex items-center justify-between px-5 shrink-0">
+        <NavLink to="/" className="flex items-center gap-2.5" onClick={onClose}>
+          <div className="w-8 h-8 bg-orange-500 rounded-lg flex items-center justify-center shadow-md">
+            <Car className="w-4 h-4 text-white" />
+          </div>
+          <span className="font-bold text-white text-[15px] tracking-tight">
+            Social<span className="text-orange-400">Genie</span>
+          </span>
+        </NavLink>
+        {/* Mobile close */}
+        <button
+          className="lg:hidden p-1 text-white/40 hover:text-white transition-colors"
+          onClick={onClose}
+        >
+          <X className="w-5 h-5" />
+        </button>
+      </div>
+
+      {/* Create Post CTA */}
+      <div className="px-3 mb-2">
+        <NavLink
+          to="/create"
+          onClick={onClose}
+          className="flex items-center justify-center gap-2 w-full bg-orange-500 hover:bg-orange-600 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors shadow-lg shadow-orange-500/20"
+        >
+          <Plus className="w-4 h-4" /> Create Post
+        </NavLink>
+      </div>
+
+      {/* Nav items */}
+      <nav className="flex-1 px-3 space-y-0.5 overflow-y-auto py-1">
+        {NAV_ITEMS.filter(i => i.to !== '/create').map(({ to, icon: Icon, label, exact, badge, isNew }) => (
           <NavLink
             key={to}
             to={to}
             end={exact}
+            onClick={onClose}
             className={({ isActive }) =>
-              `text-sm px-3 py-1.5 rounded-lg font-medium transition-colors ${
+              `group flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13.5px] font-medium transition-all ${
                 isActive
-                  ? 'bg-stone-100 text-stone-900'
-                  : 'text-stone-500 hover:text-stone-900 hover:bg-stone-50'
+                  ? 'bg-white/10 text-white'
+                  : 'text-white/50 hover:text-white hover:bg-white/5'
               }`
             }
           >
-            {label}
+            {({ isActive }) => (
+              <>
+                <Icon className={`w-[18px] h-[18px] flex-shrink-0 transition-colors ${isActive ? 'text-white' : 'text-white/40 group-hover:text-white/70'}`} />
+                {label}
+                {badge && (
+                  <span className="ml-auto bg-orange-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
+                    {badge}
+                  </span>
+                )}
+                {isNew && !badge && (
+                  <span className="ml-auto bg-teal-500/20 text-teal-400 text-[10px] font-bold rounded-full px-1.5 py-0.5">
+                    NEW
+                  </span>
+                )}
+              </>
+            )}
           </NavLink>
         ))}
+
+        {/* AI Video special entry */}
+        <NavLink
+          to="/create?mode=video"
+          onClick={onClose}
+          className={({ isActive }) =>
+            `group flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13.5px] font-medium transition-all ${
+              isActive
+                ? 'bg-white/10 text-white'
+                : 'text-white/50 hover:text-white hover:bg-white/5'
+            }`
+          }
+        >
+          {({ isActive }) => (
+            <>
+              <Video className={`w-[18px] h-[18px] flex-shrink-0 transition-colors ${isActive ? 'text-white' : 'text-white/40 group-hover:text-white/70'}`} />
+              AI Video
+              <span className="ml-auto bg-purple-500/20 text-purple-400 text-[10px] font-bold rounded-full px-1.5 py-0.5">
+                NEW
+              </span>
+            </>
+          )}
+        </NavLink>
       </nav>
 
-      <div className="flex-1" />
+      {/* Divider */}
+      <div className="h-px bg-white/5 mx-3" />
 
-      <NavLink
-        to="/create"
-        className="hidden md:flex items-center gap-1.5 bg-orange-600 hover:bg-orange-700 text-white text-sm font-semibold px-4 h-9 rounded-lg transition-colors"
-      >
-        <Plus className="w-4 h-4" /> Create Post
-      </NavLink>
+      {/* Bottom section */}
+      <div className="px-3 py-3 space-y-0.5">
+        <NavLink
+          to="/settings"
+          onClick={onClose}
+          className={({ isActive }) =>
+            `group flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13.5px] font-medium transition-all ${
+              isActive ? 'bg-white/10 text-white' : 'text-white/50 hover:text-white hover:bg-white/5'
+            }`
+          }
+        >
+          <Settings className="w-[18px] h-[18px] flex-shrink-0 text-white/40 group-hover:text-white/70" />
+          Settings
+        </NavLink>
 
-      <NavLink
-        to="/inbox"
-        className="hidden md:flex items-center gap-1.5 text-sm text-stone-600 hover:text-stone-900 h-9 px-3 rounded-lg hover:bg-stone-100 transition-colors ml-1"
-      >
-        <MessageSquare className="w-4 h-4" /> Reviews
-      </NavLink>
+        {/* User profile */}
+        {user && (
+          <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl mt-1">
+            <div className="w-7 h-7 bg-orange-500 rounded-full flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0">
+              {initials}
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-[13px] font-medium text-white truncate">{user.name}</p>
+              <p className="text-[11px] text-white/30 capitalize">{user.role}</p>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="p-1.5 text-white/25 hover:text-red-400 transition-colors rounded-lg hover:bg-white/5"
+              title="Sign out"
+            >
+              <LogOut className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
-      <button className="relative w-9 h-9 flex items-center justify-center rounded-lg hover:bg-stone-100 transition-colors ml-1">
-        <Bell className="w-5 h-5 text-stone-500" />
-        <span className="absolute top-1 right-1 w-4 h-4 bg-orange-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center leading-none">
-          3
-        </span>
-      </button>
+  return (
+    <>
+      {/* Desktop sidebar */}
+      <aside className="hidden lg:flex w-[220px] bg-[#0f1117] flex-col fixed inset-y-0 left-0 z-40 shrink-0">
+        {sidebarContent}
+      </aside>
 
-      <NavLink to="/settings">
-        <div className="w-9 h-9 bg-orange-600 rounded-full flex items-center justify-center text-white text-xs font-bold ml-1.5 hover:bg-orange-700 transition-colors cursor-pointer">
-          {initials}
+      {/* Mobile overlay sidebar */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-50 lg:hidden">
+          <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+          <aside className="absolute left-0 top-0 bottom-0 w-[220px] bg-[#0f1117] flex flex-col shadow-2xl">
+            {sidebarContent}
+          </aside>
         </div>
-      </NavLink>
-
-      <button
-        className="md:hidden w-9 h-9 flex items-center justify-center rounded-lg hover:bg-stone-100 transition-colors ml-1"
-        onClick={onMenuToggle}
-      >
-        <Menu className="w-5 h-5 text-stone-600" />
-      </button>
-    </header>
+      )}
+    </>
   );
 }
 
-// ─── MobileDrawer ─────────────────────────────────────────────────────────────
-function MobileDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { user, logout } = useAuth();
-  if (!open) return null;
+// ─── Top bar (mobile) ─────────────────────────────────────────────────────────
+function MobileTopBar({ onMenuOpen }: { onMenuOpen: () => void }) {
   return (
-    <div className="fixed inset-0 z-50 md:hidden">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <aside className="absolute left-0 top-0 bottom-0 w-72 bg-white shadow-xl flex flex-col">
-        <div className="flex items-center justify-between px-5 py-4 border-b border-stone-100">
-          <span className="font-extrabold text-stone-900 text-sm">
-            CarDekho <span className="text-orange-600">Social</span>
-          </span>
-          <button onClick={onClose} className="p-1 rounded hover:bg-stone-100">
-            <X className="w-5 h-5 text-stone-500" />
-          </button>
+    <header className="lg:hidden sticky top-0 z-30 bg-white border-b border-slate-200 h-14 flex items-center px-4 gap-3 shrink-0">
+      <button
+        className="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-slate-100 transition-colors"
+        onClick={onMenuOpen}
+      >
+        <Menu className="w-5 h-5 text-slate-600" />
+      </button>
+      <div className="flex items-center gap-2">
+        <div className="w-7 h-7 bg-orange-500 rounded-lg flex items-center justify-center">
+          <Car className="w-3.5 h-3.5 text-white" />
         </div>
-        <nav className="flex-1 p-3 space-y-0.5 overflow-y-auto">
-          {[
-            { to: '/', icon: BarChart2, label: 'Dashboard', exact: true },
-            { to: '/create', icon: Plus, label: 'Create Post' },
-            { to: '/calendar', icon: Calendar, label: 'Calendar' },
-            { to: '/inbox', icon: MessageSquare, label: 'Reviews', badge: 4 },
-            { to: '/inventory', icon: Package, label: 'Inventory' },
-            { to: '/analytics', icon: BarChart2, label: 'Analytics' },
-            { to: '/boost', icon: Zap, label: 'Boost' },
-            { to: '/settings', icon: Settings, label: 'Settings' },
-          ].map(({ to, icon: Icon, label, exact, badge }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={exact}
-              onClick={onClose}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors relative ${
-                  isActive
-                    ? 'bg-orange-50 text-orange-700'
-                    : 'text-stone-600 hover:bg-stone-50 hover:text-stone-900'
-                }`
-              }
-            >
-              <Icon className="w-4 h-4 flex-shrink-0" />
-              {label}
-              {badge && (
-                <span className="ml-auto bg-orange-100 text-orange-700 text-[10px] font-bold rounded-full px-1.5 py-0.5">
-                  {badge}
-                </span>
-              )}
-            </NavLink>
-          ))}
-        </nav>
-        {user && (
-          <div className="px-4 pb-5 pt-3 border-t border-stone-100">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 bg-orange-600 rounded-full flex items-center justify-center text-white text-xs font-bold">
-                {user.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-semibold text-stone-900 truncate">{user.name}</p>
-                <p className="text-xs text-stone-400 capitalize">{user.role}</p>
-              </div>
-              <button onClick={logout} className="text-xs text-red-400 hover:text-red-600 font-medium">
-                Sign out
-              </button>
-            </div>
-          </div>
-        )}
-      </aside>
-    </div>
+        <span className="font-bold text-slate-900 text-sm">Social<span className="text-orange-500">Genie</span></span>
+      </div>
+      <div className="flex-1" />
+      <button className="relative w-9 h-9 flex items-center justify-center rounded-xl hover:bg-slate-100 transition-colors">
+        <Bell className="w-5 h-5 text-slate-500" />
+        <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-orange-500 rounded-full" />
+      </button>
+    </header>
   );
 }
 
@@ -205,112 +250,74 @@ interface DashboardData {
 }
 
 // ─── Dashboard sub-components ─────────────────────────────────────────────────
+function StatCard({ label, value, sub, color }: { label: string; value: string | number; sub?: string; color: string }) {
+  return (
+    <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
+      <p className="text-xs text-slate-400 font-medium mb-1">{label}</p>
+      <p className={`text-2xl font-extrabold ${color} mb-0.5`}>{value}</p>
+      {sub && <p className="text-xs text-slate-400">{sub}</p>}
+    </div>
+  );
+}
+
 function SuggestedPostCard({ data }: { data: DashboardData | null }) {
   const festival = data?.upcomingFestivals?.[0];
-  const recentPost = data?.recentPosts?.[0];
-
-  const title = festival
-    ? `${festival.name_en} Special Offer`
-    : recentPost
-    ? recentPost.prompt_text.slice(0, 50)
-    : 'Weekend Test Drive Special';
-
+  const title = festival ? `${festival.name_en} Special Offer` : 'Weekend Test Drive Special';
   const caption = festival
-    ? `Celebrate ${festival.name_en} with exclusive dealership offers! Visit our showroom for special discounts on all models. Limited period offer — walk in today.`
-    : 'Saturday ho ya Sunday, aapki dream car ka test drive sirf ek call door hai! 🚗✨ Visit our showroom for exclusive weekend offers. Walk in today!';
-
+    ? `Celebrate ${festival.name_en} with exclusive offers! Visit our showroom for special discounts. Limited period only.`
+    : 'Saturday ho ya Sunday, aapki dream car ka test drive sirf ek call door hai! 🚗✨';
   const hashtags = festival
-    ? [`#${festival.name_en.replace(/\s+/g, '')}`, '#FestivalOffer', '#CarDeal', '#AutoIndia']
-    : ['#WeekendOffer', '#TestDrive', '#MarutiSuzuki', '#CarDeal'];
-
+    ? [`#${festival.name_en.replace(/\s+/g, '')}`, '#FestivalOffer', '#CarDeal']
+    : ['#WeekendOffer', '#TestDrive', '#CarDeal'];
   const badgeLabel = festival?.category ?? 'Weekend Offer';
-  const dateStr = festival
-    ? new Date(festival.date).toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short' })
-    : new Date().toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short' });
+  const dateStr = (festival ? new Date(festival.date) : new Date())
+    .toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short' });
 
   return (
-    <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-sm">
-      <div className="px-5 py-3 flex items-center justify-between border-b border-stone-100">
-        <span className="text-[11px] font-extrabold text-orange-600 tracking-widest uppercase">
-          Today's Suggested Post
-        </span>
-        <span className="text-xs text-stone-400">{dateStr}</span>
+    <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm">
+      <div className="px-5 py-3 flex items-center justify-between border-b border-slate-50">
+        <span className="text-[11px] font-extrabold text-orange-500 tracking-widest uppercase">Today's Suggested Post</span>
+        <span className="text-xs text-slate-400">{dateStr}</span>
       </div>
-
       <div className="flex gap-5 p-5">
-        {/* Template preview */}
-        <div className="w-44 flex-shrink-0 bg-gradient-to-br from-stone-900 to-stone-800 rounded-xl flex flex-col items-center justify-center p-4 relative overflow-hidden aspect-[4/3]">
+        <div className="w-40 flex-shrink-0 bg-gradient-to-br from-slate-900 to-slate-800 rounded-xl flex flex-col items-center justify-center p-4 relative overflow-hidden aspect-[4/3]">
           <div className="w-10 h-10 bg-white/10 rounded-xl flex items-center justify-center mb-3">
             <Car className="w-5 h-5 text-orange-400" />
           </div>
-          <p className="text-stone-400 text-[9px] font-bold uppercase tracking-widest mb-2">
-            {badgeLabel.toUpperCase().slice(0, 14)}
+          <p className="text-slate-400 text-[9px] font-bold uppercase tracking-widest mb-1.5">
+            {badgeLabel.slice(0, 14)}
           </p>
           <p className="text-white text-xs font-bold text-center leading-snug mb-3 px-1">
             {title.slice(0, 28)}
           </p>
-          <div className="bg-orange-600 rounded-full px-3 py-1 mb-1">
-            <p className="text-white text-[9px] font-bold">Rajesh Motors</p>
-          </div>
-          <p className="text-stone-400 text-[8px]">Maruti Suzuki Authorized Dealer</p>
-          <div className="absolute top-2 right-2 bg-stone-700/60 rounded px-1.5 py-0.5">
-            <p className="text-stone-300 text-[9px] font-medium">Template</p>
+          <div className="bg-orange-500 rounded-full px-3 py-1">
+            <p className="text-white text-[9px] font-bold">Your Dealership</p>
           </div>
         </div>
 
-        {/* Content */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-2">
-            <span className="bg-teal-100 text-teal-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
-              {badgeLabel}
-            </span>
-            <span className="bg-orange-100 text-orange-700 text-[10px] font-bold px-2 py-0.5 rounded-full">
-              Auto-Suggested
-            </span>
+          <div className="flex items-center gap-2 mb-2.5">
+            <span className="bg-teal-50 text-teal-600 text-[10px] font-bold px-2 py-0.5 rounded-full border border-teal-100">{badgeLabel}</span>
+            <span className="bg-orange-50 text-orange-600 text-[10px] font-bold px-2 py-0.5 rounded-full border border-orange-100">Auto-Suggested</span>
           </div>
-
-          <h3 className="font-bold text-stone-900 text-[15px] leading-tight mb-2">{title}</h3>
-
-          <div className="bg-stone-50 rounded-xl px-3 py-2.5 mb-2.5 border border-stone-100">
-            <p className="text-[10px] text-stone-400 font-semibold mb-0.5">Caption:</p>
-            <p className="text-xs text-stone-600 line-clamp-2 leading-relaxed">{caption}</p>
+          <h3 className="font-bold text-slate-900 text-sm leading-tight mb-2">{title}</h3>
+          <div className="bg-slate-50 rounded-xl px-3 py-2.5 mb-3 border border-slate-100">
+            <p className="text-xs text-slate-500 line-clamp-2 leading-relaxed">{caption}</p>
           </div>
-
-          <div className="flex gap-1.5 flex-wrap mb-3">
-            {hashtags.slice(0, 4).map((h) => (
-              <span key={h} className="text-[11px] text-orange-600 font-semibold">{h}</span>
+          <div className="flex gap-2 flex-wrap mb-4">
+            {hashtags.map((h) => (
+              <span key={h} className="text-[11px] text-orange-500 font-semibold">{h}</span>
             ))}
           </div>
-
-          <div className="flex items-center gap-2 mb-4">
-            <span className="text-xs text-stone-400 mr-0.5">Posting to:</span>
-            {[
-              { label: 'GMB', color: 'bg-[#4285F4]' },
-              { label: 'Facebook', color: 'bg-[#1877F2]' },
-              { label: 'Instagram', color: 'bg-gradient-to-br from-purple-500 to-pink-500' },
-            ].map(({ label, color }) => (
-              <span key={label} className="flex items-center gap-1 border border-stone-200 rounded-full px-2 py-0.5 text-[10px] font-medium text-stone-600">
-                <span className={`w-2 h-2 rounded-full ${color} flex-shrink-0`} />
-                {label}
-              </span>
-            ))}
-          </div>
-
           <div className="flex items-center gap-2">
-            <NavLink
-              to="/create"
-              className="flex items-center gap-1.5 bg-orange-600 hover:bg-orange-700 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors"
-            >
+            <NavLink to="/create" className="flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors">
               <Send className="w-3 h-3" /> Post Everywhere
             </NavLink>
-            <NavLink
-              to="/create"
-              className="flex items-center gap-1.5 text-xs font-semibold text-stone-700 hover:text-stone-900 px-3 py-2 rounded-lg border border-stone-200 hover:border-stone-300 bg-white transition-colors"
-            >
+            <NavLink to="/create" className="text-xs font-semibold text-slate-600 hover:text-slate-900 px-3 py-2 rounded-lg border border-slate-200 hover:border-slate-300 bg-white transition-colors">
               Edit First
             </NavLink>
-            <button className="flex items-center gap-1 text-xs text-stone-400 hover:text-stone-600 px-2 py-2 transition-colors">
-              <RefreshCw className="w-3 h-3" /> Regenerate
+            <button className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 px-2 py-2 transition-colors">
+              <RefreshCw className="w-3 h-3" />
             </button>
           </div>
         </div>
@@ -322,64 +329,48 @@ function SuggestedPostCard({ data }: { data: DashboardData | null }) {
 function InboxPreview({ stats }: { stats?: DashboardData['stats'] }) {
   const pendingCount = stats?.inboxPending ?? 4;
   return (
-    <div className="bg-white rounded-2xl border border-stone-200 overflow-hidden shadow-sm">
-      <div className="px-5 py-3.5 flex items-center justify-between border-b border-stone-100">
+    <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm">
+      <div className="px-5 py-3.5 flex items-center justify-between border-b border-slate-50">
         <div className="flex items-center gap-2.5">
-          <h3 className="font-bold text-stone-900">Review & Comment Inbox</h3>
+          <h3 className="font-semibold text-slate-900 text-sm">Review & Comment Inbox</h3>
           {pendingCount > 0 && (
-            <span className="bg-orange-100 text-orange-700 text-[11px] font-bold px-2 py-0.5 rounded-full">
+            <span className="bg-orange-50 text-orange-600 text-[10px] font-bold px-2 py-0.5 rounded-full border border-orange-100">
               {pendingCount} Pending
             </span>
           )}
         </div>
-        <NavLink
-          to="/inbox"
-          className="text-xs text-orange-600 font-bold hover:text-orange-700 flex items-center gap-0.5"
-        >
+        <NavLink to="/inbox" className="text-xs text-orange-500 font-semibold hover:text-orange-600 flex items-center gap-0.5">
           View All <ChevronRight className="w-3.5 h-3.5" />
         </NavLink>
       </div>
-
       <div className="p-4">
         <div className="flex gap-3">
-          <div className="w-9 h-9 bg-gradient-to-br from-orange-400 to-orange-600 rounded-full flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0">
-            PS
-          </div>
+          <div className="w-9 h-9 bg-gradient-to-br from-orange-400 to-orange-600 rounded-full flex items-center justify-center text-white text-[11px] font-bold flex-shrink-0">PS</div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2 mb-1">
-              <span className="font-semibold text-sm text-stone-900">Priya Sharma</span>
-              <span className="text-[10px] bg-stone-100 text-stone-500 px-1.5 py-0.5 rounded font-medium">
-                Google Review
-              </span>
-              <span className="text-[10px] text-stone-400 ml-auto">2h ago</span>
+              <span className="font-semibold text-sm text-slate-900">Priya Sharma</span>
+              <span className="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-medium">Google Review</span>
+              <span className="text-[10px] text-slate-400 ml-auto">2h ago</span>
             </div>
             <div className="flex gap-0.5 mb-1.5">
-              {[1, 2, 3, 4, 5].map((s) => (
-                <Star key={s} className="w-3 h-3 text-yellow-400 fill-yellow-400" />
-              ))}
+              {[1, 2, 3, 4, 5].map((s) => <Star key={s} className="w-3 h-3 text-yellow-400 fill-yellow-400" />)}
             </div>
-            <p className="text-xs text-stone-600 mb-2 leading-relaxed line-clamp-2">
-              "Excellent service at Rajesh Motors! Got my new Brezza delivered on time. Amit from the sales team was very helpful throughout the process."
+            <p className="text-xs text-slate-500 mb-2.5 leading-relaxed line-clamp-2">
+              "Excellent service! Got my new Brezza delivered on time. The sales team was very helpful."
             </p>
-            <div className="bg-teal-50 border border-teal-100 rounded-xl p-2.5 mb-2">
-              <p className="text-[10px] font-bold text-teal-700 mb-1 flex items-center gap-1">
+            <div className="bg-teal-50 border border-teal-100 rounded-xl p-2.5 mb-2.5">
+              <p className="text-[10px] font-bold text-teal-600 mb-1 flex items-center gap-1">
                 <Sparkles className="w-3 h-3" /> AI Suggested Reply
               </p>
-              <p className="text-xs text-stone-600 line-clamp-2 leading-relaxed">
-                Thank you so much, Priya! We're thrilled to hear about your experience. Amit and the entire team appreciate your kind words. Enjoy your new Brezza! 🚗
+              <p className="text-xs text-slate-600 line-clamp-2 leading-relaxed">
+                Thank you so much, Priya! We're thrilled about your experience. Enjoy your new Brezza! 🚗
               </p>
             </div>
             <div className="flex gap-2">
-              <NavLink
-                to="/inbox"
-                className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors"
-              >
-                <Check className="w-3 h-3" /> Approve &amp; Send
+              <NavLink to="/inbox" className="flex items-center gap-1.5 bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg transition-colors">
+                <Check className="w-3 h-3" /> Approve & Send
               </NavLink>
-              <NavLink
-                to="/inbox"
-                className="text-xs text-stone-600 hover:text-stone-900 px-3 py-1.5 rounded-lg border border-stone-200 font-medium hover:bg-stone-50 transition-colors"
-              >
+              <NavLink to="/inbox" className="text-xs text-slate-600 hover:text-slate-900 px-3 py-1.5 rounded-lg border border-slate-200 font-medium hover:bg-slate-50 transition-colors">
                 Edit
               </NavLink>
             </div>
@@ -390,103 +381,35 @@ function InboxPreview({ stats }: { stats?: DashboardData['stats'] }) {
   );
 }
 
-function ThisWeekPanel({ stats }: { stats?: DashboardData['stats'] }) {
-  const posts = stats?.postsThisMonth ?? 4;
-  const goal = 5;
-  const pct = Math.min(100, Math.round((posts / goal) * 100));
-
-  return (
-    <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-      <h3 className="font-bold text-stone-900 mb-4">This Week</h3>
-      <div className="space-y-4">
-        <div>
-          <div className="flex items-start justify-between mb-2">
-            <div>
-              <p className="text-xs text-stone-500 font-medium mb-0.5">Posts Published</p>
-              <p className="text-2xl font-extrabold text-stone-900 leading-none">
-                {posts}{' '}
-                <span className="text-sm font-semibold text-stone-400">of {goal} goal</span>
-              </p>
-            </div>
-            <div className="w-8 h-8 bg-teal-50 rounded-xl flex items-center justify-center">
-              <BarChart2 className="w-4 h-4 text-teal-500" />
-            </div>
-          </div>
-          <div className="w-full bg-stone-100 rounded-full h-2">
-            <div
-              className="bg-teal-500 h-2 rounded-full transition-all"
-              style={{ width: `${pct}%` }}
-            />
-          </div>
-        </div>
-
-        <div className="pt-3 border-t border-stone-100">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs text-stone-500 font-medium mb-0.5">Reviews Received</p>
-              <p className="text-2xl font-extrabold text-stone-900">7</p>
-              <p className="text-xs text-stone-400">across platforms</p>
-            </div>
-            <div className="w-8 h-8 bg-yellow-50 rounded-xl flex items-center justify-center">
-              <Star className="w-4 h-4 text-yellow-500" />
-            </div>
-          </div>
-        </div>
-
-        <div className="pt-3 border-t border-stone-100">
-          <div className="flex items-start justify-between">
-            <div>
-              <p className="text-xs text-stone-500 font-medium mb-0.5">Pending Replies</p>
-              <p className="text-2xl font-extrabold text-stone-900">{stats?.inboxPending ?? 4}</p>
-              <p className="text-xs text-orange-600 font-semibold">need attention</p>
-            </div>
-            <div className="w-8 h-8 bg-orange-50 rounded-xl flex items-center justify-center">
-              <MessageSquare className="w-4 h-4 text-orange-500" />
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 function ComingUpPanel({ festivals }: { festivals?: DashboardData['upcomingFestivals'] }) {
-  const iconMap = [Calendar, Zap, Car];
   const defaults = [
     { label: 'Republic Day', dateStr: 'Jan 26', sub: 'Festival post ready' },
     { label: 'Month-End Offer', dateStr: 'Jan 31', sub: 'Suggest closing deals' },
-    { label: 'New Arrival Post', dateStr: 'Upcoming', sub: 'Swift 2026 stock arriving soon' },
+    { label: 'New Arrival Post', dateStr: 'Upcoming', sub: 'Swift 2026 stock arriving' },
   ];
-
-  const items =
-    festivals && festivals.length > 0
-      ? festivals.slice(0, 3).map((f) => ({
-          label: f.name_en,
-          dateStr: new Date(f.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
-          sub: f.category ?? 'Festival',
-        }))
-      : defaults;
+  const items = festivals?.length
+    ? festivals.slice(0, 3).map((f) => ({
+        label: f.name_en,
+        dateStr: new Date(f.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
+        sub: f.category ?? 'Festival',
+      }))
+    : defaults;
 
   return (
-    <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-      <h3 className="font-bold text-stone-900 mb-3.5">Coming Up</h3>
-      <div className="space-y-2.5">
-        {items.map(({ label, dateStr, sub }, i) => {
-          const Icon = iconMap[i % iconMap.length]!;
-          return (
-            <div key={label} className="flex items-start gap-3 p-3 bg-stone-50 rounded-xl">
-              <div className="w-8 h-8 bg-white rounded-xl border border-stone-200 flex items-center justify-center flex-shrink-0 shadow-sm">
-                <Icon className="w-3.5 h-3.5 text-stone-500" />
-              </div>
-              <div>
-                <p className="text-sm font-semibold text-stone-900">{label}</p>
-                <p className="text-xs text-stone-400">
-                  {dateStr} — {sub}
-                </p>
-              </div>
+    <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
+      <h3 className="font-semibold text-slate-900 text-sm mb-3.5">Coming Up</h3>
+      <div className="space-y-2">
+        {items.map(({ label, dateStr, sub }) => (
+          <div key={label} className="flex items-center gap-3 py-2">
+            <div className="w-8 h-8 bg-slate-50 rounded-xl border border-slate-100 flex items-center justify-center flex-shrink-0">
+              <Calendar className="w-3.5 h-3.5 text-slate-400" />
             </div>
-          );
-        })}
+            <div>
+              <p className="text-sm font-medium text-slate-800">{label}</p>
+              <p className="text-xs text-slate-400">{dateStr} — {sub}</p>
+            </div>
+          </div>
+        ))}
       </div>
     </div>
   );
@@ -494,30 +417,24 @@ function ComingUpPanel({ festivals }: { festivals?: DashboardData['upcomingFesti
 
 function ConnectedPanel() {
   return (
-    <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-      <h3 className="font-bold text-stone-900 mb-3.5">Connected</h3>
+    <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
+      <h3 className="font-semibold text-slate-900 text-sm mb-3.5">Connected Accounts</h3>
       <div className="space-y-3">
         {[
-          { name: 'Google My Business', handle: 'Rajesh Motors — GMB', color: '#4285F4' },
-          { name: 'Facebook Page', handle: 'Rajesh Motors Official', color: '#1877F2' },
-          { name: 'Instagram Business', handle: '@rajeshmotors_official', color: '#E1306C' },
+          { name: 'Google My Business', color: '#4285F4', status: 'Ready' },
+          { name: 'Facebook Page',       color: '#1877F2', status: 'Ready' },
+          { name: 'Instagram Business',  color: '#E1306C', status: 'Ready' },
         ].map((p) => (
           <div key={p.name} className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
-              <div
-                className="w-7 h-7 rounded-lg flex items-center justify-center"
-                style={{ background: `${p.color}20` }}
-              >
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: `${p.color}18` }}>
                 <div className="w-3 h-3 rounded-full" style={{ background: p.color }} />
               </div>
-              <div>
-                <p className="text-xs font-semibold text-stone-800">{p.handle}</p>
-                <p className="text-[10px] text-stone-400">{p.name}</p>
-              </div>
+              <p className="text-xs font-medium text-slate-700">{p.name}</p>
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1">
               <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
-              <span className="text-[10px] text-green-600 font-semibold">Ready</span>
+              <span className="text-[10px] text-green-600 font-semibold">{p.status}</span>
             </div>
           </div>
         ))}
@@ -530,42 +447,39 @@ function ConnectedPanel() {
 function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const { user } = useAuth();
-
   const firstName = user?.name?.split(' ')[0] ?? 'there';
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
   useEffect(() => {
-    api
-      .get<{ success: boolean } & DashboardData>('/dealer/dashboard')
+    api.get<{ success: boolean } & DashboardData>('/dealer/dashboard')
       .then((res) => setData(res))
       .catch(console.error);
   }, []);
 
   return (
-    <div className="max-w-[1200px] mx-auto">
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_300px] gap-6">
-        {/* Main content */}
-        <div className="space-y-5">
-          <div>
-            <h1 className="text-2xl font-extrabold text-stone-900">
-              {greeting}, {firstName} 👋
-            </h1>
-            <p className="text-sm text-stone-500 mt-1">
-              Your dealership social presence at a glance —{' '}
-              <span className="text-orange-600 font-semibold cursor-pointer hover:underline">
-                5 min routine
-              </span>
-            </p>
-          </div>
+    <div className="max-w-[1180px] mx-auto">
+      {/* Header */}
+      <div className="mb-6">
+        <h1 className="text-xl font-bold text-slate-900">{greeting}, {firstName} 👋</h1>
+        <p className="text-sm text-slate-400 mt-0.5">Your dealership social presence at a glance</p>
+      </div>
 
+      {/* Stats row */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+        <StatCard label="Posts this month"  value={data?.stats.postsThisMonth ?? 0} sub="vs last month"  color="text-slate-900" />
+        <StatCard label="Total reach"        value={data?.stats.totalReach ? `${(data.stats.totalReach / 1000).toFixed(1)}k` : '—'} sub="across platforms" color="text-slate-900" />
+        <StatCard label="Leads generated"    value={data?.stats.leadsGenerated ?? 0} sub="this month" color="text-teal-600" />
+        <StatCard label="Inbox pending"      value={data?.stats.inboxPending ?? 0} sub="need reply" color="text-orange-500" />
+      </div>
+
+      {/* Main grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_280px] gap-5">
+        <div className="space-y-5">
           <SuggestedPostCard data={data} />
           <InboxPreview stats={data?.stats} />
         </div>
-
-        {/* Right sidebar */}
         <div className="space-y-4">
-          <ThisWeekPanel stats={data?.stats} />
           <ComingUpPanel festivals={data?.upcomingFestivals} />
           <ConnectedPanel />
         </div>
@@ -574,27 +488,18 @@ function Dashboard() {
   );
 }
 
-// ─── Layout ───────────────────────────────────────────────────────────────────
-function DashboardLayout({
-  children,
-  fullBleed,
-}: {
-  children: React.ReactNode;
-  fullBleed?: boolean;
-}) {
+// ─── Main Layout ──────────────────────────────────────────────────────────────
+function AppLayout({ children, fullBleed }: { children: React.ReactNode; fullBleed?: boolean }) {
   const [mobileOpen, setMobileOpen] = useState(false);
-
   return (
-    <div className="min-h-screen flex flex-col bg-[#F5F0EA]">
-      <TopNav onMenuToggle={() => setMobileOpen(true)} />
-      <MobileDrawer open={mobileOpen} onClose={() => setMobileOpen(false)} />
-      <main
-        className={`flex-1 ${
-          fullBleed ? 'overflow-hidden flex flex-col' : 'p-4 md:p-6 lg:p-8 overflow-y-auto'
-        }`}
-      >
-        {children}
-      </main>
+    <div className="flex h-screen overflow-hidden bg-[#f1f5f9]">
+      <Sidebar mobileOpen={mobileOpen} onClose={() => setMobileOpen(false)} />
+      <div className="flex-1 flex flex-col lg:pl-[220px] min-w-0">
+        <MobileTopBar onMenuOpen={() => setMobileOpen(true)} />
+        <main className={`flex-1 min-h-0 ${fullBleed ? 'overflow-hidden flex flex-col' : 'overflow-y-auto p-5 md:p-7'}`}>
+          {children}
+        </main>
+      </div>
     </div>
   );
 }
@@ -613,86 +518,14 @@ export default function App() {
         <Router>
           <Routes>
             <Route path="/onboarding" element={<Onboarding />} />
-            <Route
-              path="/"
-              element={
-                <RequireAuth>
-                  <DashboardLayout>
-                    <Dashboard />
-                  </DashboardLayout>
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/create"
-              element={
-                <RequireAuth>
-                  <DashboardLayout fullBleed>
-                    <CreatePost />
-                  </DashboardLayout>
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/calendar"
-              element={
-                <RequireAuth>
-                  <DashboardLayout>
-                    <CalendarPage />
-                  </DashboardLayout>
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/inbox"
-              element={
-                <RequireAuth>
-                  <DashboardLayout>
-                    <InboxPage />
-                  </DashboardLayout>
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/inventory"
-              element={
-                <RequireAuth>
-                  <DashboardLayout>
-                    <InventoryPage />
-                  </DashboardLayout>
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/analytics"
-              element={
-                <RequireAuth>
-                  <DashboardLayout>
-                    <AnalyticsPage />
-                  </DashboardLayout>
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/boost"
-              element={
-                <RequireAuth>
-                  <DashboardLayout>
-                    <BoostPage />
-                  </DashboardLayout>
-                </RequireAuth>
-              }
-            />
-            <Route
-              path="/settings"
-              element={
-                <RequireAuth>
-                  <DashboardLayout>
-                    <SettingsPage />
-                  </DashboardLayout>
-                </RequireAuth>
-              }
-            />
+            <Route path="/" element={<RequireAuth><AppLayout><Dashboard /></AppLayout></RequireAuth>} />
+            <Route path="/create" element={<RequireAuth><AppLayout fullBleed><CreatePost /></AppLayout></RequireAuth>} />
+            <Route path="/calendar" element={<RequireAuth><AppLayout><CalendarPage /></AppLayout></RequireAuth>} />
+            <Route path="/inbox" element={<RequireAuth><AppLayout><InboxPage /></AppLayout></RequireAuth>} />
+            <Route path="/inventory" element={<RequireAuth><AppLayout><InventoryPage /></AppLayout></RequireAuth>} />
+            <Route path="/analytics" element={<RequireAuth><AppLayout><AnalyticsPage /></AppLayout></RequireAuth>} />
+            <Route path="/boost" element={<RequireAuth><AppLayout><BoostPage /></AppLayout></RequireAuth>} />
+            <Route path="/settings" element={<RequireAuth><AppLayout><SettingsPage /></AppLayout></RequireAuth>} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Routes>
         </Router>

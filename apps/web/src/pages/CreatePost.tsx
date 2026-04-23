@@ -7,8 +7,9 @@ import { generateBrandedCreative } from '../services/imageGeneration';
 import {
   Tag, Sparkles, Heart, Gift, PenLine,
   ArrowLeft, RefreshCw, Check, ImagePlus, Video, X,
-  Send, Download, Zap, Globe, Calendar,
+  Send, Download, Zap, Globe, Calendar, Film, Clock, Wand2,
 } from 'lucide-react';
+import api from '../services/api';
 
 // ─── Platform SVG icons ───────────────────────────────────────────────────────
 function FbIcon({ className }: { className?: string }) {
@@ -99,6 +100,20 @@ export default function CreatePost() {
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const { addToast } = useToast();
+
+  // AI Video mode
+  const isVideoMode = searchParams.get('mode') === 'video';
+  const [videoPrompt, setVideoPrompt] = useState('');
+  const [videoDuration, setVideoDuration] = useState(15);
+  const [videoAspect, setVideoAspect] = useState<'9:16' | '16:9' | '1:1'>('9:16');
+  const [videoStyle, setVideoStyle] = useState<'cinematic' | 'dynamic' | 'minimal'>('cinematic');
+  const [generatingVideo, setGeneratingVideo] = useState(false);
+  const [videoJobId, setVideoJobId] = useState<string | null>(null);
+  const [videoUrl, setVideoUrl] = useState<string | null>(null);
+  const [videoImageId, setVideoImageId] = useState<string | null>(null);
+  const [videoImageUrl, setVideoImageUrl] = useState<string | null>(null);
+  const [uploadingVideoImage, setUploadingVideoImage] = useState(false);
+  const videoImageRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { creativeService.getPrompts().catch(console.error); }, []);
   useEffect(() => { const p = searchParams.get('prompt'); if (p) setPrompt(p); }, [searchParams]);
@@ -244,6 +259,48 @@ export default function CreatePost() {
     }
   };
 
+  const handleVideoImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingVideoImage(true);
+    try {
+      const res = await creativeService.uploadImage(file);
+      setVideoImageId(res.id);
+      setVideoImageUrl(res.url);
+    } catch {
+      addToast({ type: 'error', title: 'Upload failed', message: 'Could not upload image. Try again.' });
+    } finally {
+      setUploadingVideoImage(false);
+      e.target.value = '';
+    }
+  };
+
+  const handleGenerateVideo = async () => {
+    if (!videoPrompt.trim()) return;
+    setGeneratingVideo(true);
+    setVideoJobId(null);
+    setVideoUrl(null);
+    try {
+      const res = await api.post<{ success: boolean; video_url?: string; job_id?: string; status?: string; message?: string }>('/creatives/generate-video', {
+        prompt: videoPrompt,
+        image_id: videoImageId ?? undefined,
+        duration_seconds: videoDuration,
+        aspect_ratio: videoAspect,
+      });
+      if (res.video_url) {
+        setVideoUrl(res.video_url);
+        addToast({ type: 'success', title: 'Video ready!', message: `Your ${videoDuration}s video has been generated.` });
+      } else if (res.job_id) {
+        setVideoJobId(res.job_id);
+        addToast({ type: 'success', title: 'Video queued', message: res.message ?? 'Video is being processed.' });
+      }
+    } catch {
+      addToast({ type: 'error', title: 'Video generation failed', message: 'Could not generate video. Please try again.' });
+    } finally {
+      setGeneratingVideo(false);
+    }
+  };
+
   const currentVariant = variants ? variants.captions[selectedVariant] : null;
   const currentCreative = variants ? variants.creatives[selectedVariant] : null;
   const charLimitMap: Record<string, number> = { google: 1500, facebook: 63206, instagram: 2200 };
@@ -270,6 +327,214 @@ export default function CreatePost() {
             <NavLink to="/calendar" className="px-4 py-2.5 text-sm font-semibold bg-orange-600 text-white rounded-xl hover:bg-orange-700 transition-colors">
               View Calendar
             </NavLink>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ─── AI Video Mode ────────────────────────────────────────────────────────
+  if (isVideoMode) {
+    return (
+      <div className="h-full flex flex-col overflow-y-auto bg-[#f1f5f9]">
+        {/* Header */}
+        <div className="flex items-center gap-3 px-5 py-3 bg-white border-b border-gray-200 shrink-0">
+          <NavLink to="/" className="text-gray-400 hover:text-gray-700 transition-colors">
+            <ArrowLeft className="w-4 h-4" />
+          </NavLink>
+          <span className="text-gray-300 text-sm">/</span>
+          <span className="text-gray-400 text-sm">Create</span>
+          <span className="text-gray-300 text-sm">/</span>
+          <span className="font-semibold text-gray-900 text-sm flex items-center gap-1.5">
+            <Film className="w-4 h-4 text-orange-500" /> AI Video
+          </span>
+          <span className="ml-2 text-[10px] font-bold px-2 py-0.5 rounded-full bg-orange-100 text-orange-600 uppercase tracking-wide">Coming Soon</span>
+        </div>
+
+        <div className="flex-1 p-5 md:p-7 max-w-2xl mx-auto w-full space-y-5">
+          {/* Intro card */}
+          <div className="bg-gradient-to-br from-[#0f1117] to-[#1a1f2e] rounded-2xl p-6 text-white">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-xl bg-orange-500 flex items-center justify-center flex-shrink-0">
+                <Film className="w-6 h-6" />
+              </div>
+              <div>
+                <h2 className="text-lg font-bold">AI Video Generation</h2>
+                <p className="text-gray-400 text-sm mt-1">Create short-form videos for Reels and Stories directly from a text description. Our AI turns your concept into a ready-to-post automotive video.</p>
+                <div className="flex flex-wrap gap-2 mt-3">
+                  {['Instagram Reels', 'Facebook Stories', 'YouTube Shorts'].map((p) => (
+                    <span key={p} className="text-[11px] px-2.5 py-1 rounded-full bg-white/10 text-gray-300">{p}</span>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Form */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-5">
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Video Concept</label>
+              <textarea
+                value={videoPrompt}
+                onChange={(e) => setVideoPrompt(e.target.value)}
+                rows={3}
+                placeholder="e.g. Diwali offer — new Hyundai Creta, ₹50,000 discount, limited period"
+                className="w-full border rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400 resize-none text-gray-800 placeholder:text-gray-400"
+              />
+            </div>
+
+            {/* Optional image upload */}
+            <div>
+              <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Base Image (optional)</label>
+              <input ref={videoImageRef} type="file" accept="image/*" className="hidden" onChange={handleVideoImageUpload} />
+              {videoImageUrl ? (
+                <div className="flex items-center gap-3 p-3 rounded-xl border border-gray-100 bg-gray-50">
+                  <img src={videoImageUrl} alt="Base" className="w-14 h-14 rounded-lg object-cover border" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-gray-700">Image uploaded</p>
+                    <p className="text-xs text-gray-400">Will be used as the video background</p>
+                  </div>
+                  <button onClick={() => { setVideoImageId(null); setVideoImageUrl(null); }} className="p-1.5 text-gray-400 hover:text-red-500">
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                <button
+                  onClick={() => videoImageRef.current?.click()}
+                  disabled={uploadingVideoImage}
+                  className="flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-dashed border-gray-200 hover:border-orange-300 hover:bg-orange-50 text-gray-400 hover:text-orange-600 text-sm font-medium transition-colors disabled:opacity-50 w-full justify-center"
+                >
+                  <ImagePlus className="w-4 h-4" />
+                  {uploadingVideoImage ? 'Uploading…' : 'Upload car photo (or we\'ll generate a background)'}
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Duration</label>
+                <div className="flex gap-2">
+                  {[15, 30, 60].map((s) => (
+                    <button key={s} onClick={() => setVideoDuration(s)}
+                      className={`flex-1 py-2 rounded-lg border text-sm font-medium transition-colors ${videoDuration === s ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-gray-600 border-gray-200 hover:border-orange-300'}`}
+                    >{s}s</button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Format</label>
+                <div className="flex gap-2">
+                  {(['9:16', '1:1', '16:9'] as const).map((r) => (
+                    <button key={r} onClick={() => setVideoAspect(r)}
+                      className={`flex-1 py-2 rounded-lg border text-xs font-medium transition-colors ${videoAspect === r ? 'bg-orange-500 text-white border-orange-500' : 'bg-white text-gray-600 border-gray-200 hover:border-orange-300'}`}
+                    >{r}</button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <button
+              onClick={handleGenerateVideo}
+              disabled={!videoPrompt.trim() || generatingVideo}
+              className="w-full py-3 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-semibold text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {generatingVideo ? (
+                <><RefreshCw className="w-4 h-4 animate-spin" /> Generating video… ({videoDuration}s)</>
+              ) : (
+                <><Wand2 className="w-4 h-4" /> Generate Video</>
+              )}
+            </button>
+            {generatingVideo && (
+              <p className="text-xs text-center text-gray-400">
+                FFmpeg is rendering your video — usually takes {Math.round(videoDuration * 1.5)}–{Math.round(videoDuration * 3)}s
+              </p>
+            )}
+          </div>
+
+          {/* Generated video player */}
+          {videoUrl && (
+            <div className="bg-white rounded-2xl border border-green-100 shadow-sm overflow-hidden">
+              <div className="px-5 py-3 border-b border-gray-50 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-green-500" />
+                  <span className="text-sm font-semibold text-gray-800">Video Ready — {videoDuration}s · {videoAspect}</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={videoUrl}
+                    download={`socialgenie-video-${Date.now()}.mp4`}
+                    className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 px-3 py-1.5 rounded-lg border border-blue-200 hover:bg-blue-50 transition-colors"
+                  >
+                    <Download className="w-3.5 h-3.5" /> Download
+                  </a>
+                  <button
+                    onClick={() => { setVideoUrl(null); setVideoJobId(null); }}
+                    className="text-xs text-gray-400 hover:text-gray-600 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+                  >
+                    New Video
+                  </button>
+                </div>
+              </div>
+              <div className="flex justify-center bg-black p-4">
+                <video
+                  src={videoUrl}
+                  controls
+                  autoPlay
+                  loop
+                  className={`max-h-[480px] rounded-lg ${videoAspect === '9:16' ? 'max-w-[270px]' : videoAspect === '1:1' ? 'max-w-[480px]' : 'w-full'}`}
+                />
+              </div>
+              <div className="px-5 py-4 bg-gray-50 border-t">
+                <p className="text-xs text-gray-500 font-medium mb-2">Share to</p>
+                <div className="flex gap-2">
+                  {[
+                    { label: 'Instagram Reels', color: 'bg-pink-500' },
+                    { label: 'Facebook Story', color: 'bg-blue-600' },
+                    { label: 'WhatsApp Status', color: 'bg-green-500' },
+                  ].map((p) => (
+                    <button key={p.label} className={`${p.color} text-white text-xs font-medium px-3 py-1.5 rounded-lg hover:opacity-90 transition-opacity`}>
+                      {p.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[11px] text-gray-400 mt-2">Connect Facebook/Instagram in Settings → Platforms to publish directly</p>
+              </div>
+            </div>
+          )}
+
+          {/* Queued state (fallback if no video_url returned) */}
+          {videoJobId && !videoUrl && (
+            <div className="bg-white rounded-2xl border border-orange-100 shadow-sm p-6 text-center space-y-3">
+              <div className="w-12 h-12 rounded-full bg-orange-100 flex items-center justify-center mx-auto">
+                <Clock className="w-6 h-6 text-orange-500" />
+              </div>
+              <h3 className="font-semibold text-gray-800">Video queued</h3>
+              <p className="text-xs text-gray-400 font-mono bg-gray-50 px-3 py-1.5 rounded-lg">Job ID: {videoJobId}</p>
+              <button onClick={() => setVideoJobId(null)} className="text-sm text-orange-600 hover:text-orange-700 font-medium">
+                Generate another
+              </button>
+            </div>
+          )}
+
+          {/* Inspiration chips */}
+          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+            <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Video Ideas for Indian Dealers</p>
+            <div className="space-y-2">
+              {[
+                'Festive Diwali offer video — new Creta with fireworks + ₹50,000 discount in 15 seconds',
+                'Customer delivery celebration — handover moment, family joy, showroom branding',
+                'New model arrival teaser — cinematic reveal of Nexon EV in showroom with dramatic lighting',
+                'Comparison video — Petrol vs EV for Indian family, dynamic cuts between both cars',
+              ].map((idea) => (
+                <button
+                  key={idea}
+                  onClick={() => setVideoPrompt(idea)}
+                  className="w-full text-left text-sm text-gray-600 px-3 py-2.5 rounded-lg bg-gray-50 hover:bg-orange-50 hover:text-orange-700 transition-colors border border-transparent hover:border-orange-200"
+                >
+                  {idea}
+                </button>
+              ))}
+            </div>
           </div>
         </div>
       </div>

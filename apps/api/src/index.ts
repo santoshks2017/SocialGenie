@@ -21,12 +21,22 @@ import boostRoutes from './routes/boost.js';
 import leadsRoutes from './routes/leads.js';
 import usersRoutes from './routes/users.js';
 import uploadRoutes from './routes/upload.js';
+import inspirationRoutes from './routes/inspiration.js';
 import { UPLOADS_ROOT } from './routes/upload.js';
 
 const fastify = Fastify({ logger: true });
 
+const ALLOWED_ORIGINS = new Set([
+  process.env['FRONTEND_URL'] ?? 'http://localhost:5173',
+  'http://localhost:5173',
+  'http://127.0.0.1:5173',
+]);
 await fastify.register(cors, {
-  origin: process.env['FRONTEND_URL'] ?? 'http://localhost:5173',
+  origin: (origin, cb) => {
+    // Allow requests with no origin (server-to-server, curl) and listed origins
+    if (!origin || ALLOWED_ORIGINS.has(origin)) return cb(null, true);
+    cb(new Error(`Origin ${origin} not allowed by CORS`), false);
+  },
   credentials: true,
 });
 
@@ -58,8 +68,9 @@ fastify.register(inventoryRoutes, { prefix: '/v1/inventory' });
 fastify.register(inboxRoutes,     { prefix: '/v1/inbox' });
 fastify.register(boostRoutes,     { prefix: '/v1/boost' });
 fastify.register(leadsRoutes,     { prefix: '/v1/leads' });
-fastify.register(usersRoutes,     { prefix: '/v1/users' });
-fastify.register(uploadRoutes,    { prefix: '/v1/upload' });
+fastify.register(usersRoutes,       { prefix: '/v1/users' });
+fastify.register(uploadRoutes,      { prefix: '/v1/upload' });
+fastify.register(inspirationRoutes, { prefix: '/v1/dealer' });
 
 fastify.get('/v1/health', async () => ({
   status: 'ok',

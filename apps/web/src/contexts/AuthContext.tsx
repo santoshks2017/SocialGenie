@@ -22,46 +22,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   });
   const [isLoading, setIsLoading] = useState(false);
 
-  // Validate/refresh token on mount
-  useEffect(() => {
-    if (!token) return;
-    try {
-      const [, payload] = token.split('.');
-      const decoded = JSON.parse(atob(payload));
-      if (decoded.exp && decoded.exp * 1000 < Date.now()) {
-        const refreshToken = localStorage.getItem('refresh_token');
-        if (refreshToken) {
-          authService.refreshToken(refreshToken)
-            .then((res) => { localStorage.setItem('access_token', res.token); setToken(res.token); })
-            .catch(() => logout());
-        } else {
-          logout();
-        }
-      }
-    } catch {
-      logout();
-    }
-  }, []);
-
-  // Fetch user info from API if token exists but user is missing from localStorage
-  useEffect(() => {
-    if (!token || user) return;
-    api.get<{ user: { id: string; name: string; role: string; dealerId: string | null; permissions: Record<string, boolean> } }>('/users/me')
-      .then((res) => {
-        const u = res.user;
-        const userInfo: UserInfo = {
-          id: u.id,
-          name: u.name,
-          role: u.role as UserInfo['role'],
-          dealer_id: u.dealerId,
-          permissions: u.permissions as UserInfo['permissions'],
-        };
-        localStorage.setItem('user_info', JSON.stringify(userInfo));
-        setUser(userInfo);
-      })
-      .catch(() => { /* token may be invalid; JWT refresh effect handles logout */ });
-  }, [token]);
-
   const login = useCallback(async (phone: string, otp: string): Promise<UserInfo> => {
     setIsLoading(true);
     try {
@@ -93,6 +53,53 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setToken(null);
     setUser(null);
   }, []);
+
+  // Validate/refresh token on mount
+  useEffect(() => {
+    if (!token) return;
+    try {
+      const [, payload] = token.split('.');
+      const decoded = JSON.parse(atob(payload));
+      if (decoded.exp && decoded.exp * 1000 < Date.now()) {
+        const refreshToken = localStorage.getItem('refresh_token');
+        if (refreshToken) {
+          authService.refreshToken(refreshToken)
+            .then((res) => { localStorage.setItem('access_token', res.token); setToken(res.token); })
+            .catch(() => logout());
+        } else {
+          logout();
+        }
+      }
+    } catch {
+      logout();
+    }
+  }, [logout]);
+
+  // Listen for forced logout events dispatched by the api client (e.g. refresh failed)
+  useEffect(() => {
+    const handleForceLogout = () => logout();
+    window.addEventListener('auth:logout', handleForceLogout);
+    return () => window.removeEventListener('auth:logout', handleForceLogout);
+  }, [logout]);
+
+  // Fetch user info from API if token exists but user is missing from localStorage
+  useEffect(() => {
+    if (!token || user) return;
+    api.get<{ user: { id: string; name: string; role: string; dealerId: string | null; permissions: Record<string, boolean> } }>('/users/me')
+      .then((res) => {
+        const u = res.user;
+        const userInfo: UserInfo = {
+          id: u.id,
+          name: u.name,
+          role: u.role as UserInfo['role'],
+          dealer_id: u.dealerId,
+          permissions: u.permissions as UserInfo['permissions'],
+        };
+        localStorage.setItem('user_info', JSON.stringify(userInfo));
+        setUser(userInfo);
+      })
+      .catch(() => { /* token may be invalid; JWT refresh effect handles logout */ });
+  }, [token]);
 
   return (
     <AuthContext.Provider value={{ user, token, isLoading, login, logout }}>

@@ -5,6 +5,7 @@ node_modules/
 src/generated/
 
 # TypeScript build output (project uses tsx for dev, tsc for prod build)
+dist/
 **/*.js
 **/*.js.map
 **/*.d.ts

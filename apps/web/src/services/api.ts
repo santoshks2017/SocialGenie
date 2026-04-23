@@ -16,14 +16,35 @@ interface RequestOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined>;
 }
 
+// Attempt a silent token refresh; returns new token or null on failure.
+async function tryRefreshToken(): Promise<string | null> {
+  const refreshToken = localStorage.getItem('refresh_token');
+  if (!refreshToken) return null;
+  try {
+    const res = await fetch(`${API_BASE_URL}/auth/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refreshToken }),
+    });
+    if (!res.ok) return null;
+    const data = await res.json() as { token?: string };
+    if (!data.token) return null;
+    localStorage.setItem('access_token', data.token);
+    return data.token;
+  } catch {
+    return null;
+  }
+}
+
 async function request<T>(
   endpoint: string,
-  options: RequestOptions = {}
+  options: RequestOptions = {},
+  isRetry = false,
 ): Promise<T> {
   const { params, ...fetchOptions } = options;
-  
+
   let url = `${API_BASE_URL}${endpoint}`;
-  
+
   if (params) {
     const searchParams = new URLSearchParams();
     Object.entries(params).forEach(([key, value]) => {
@@ -38,7 +59,7 @@ async function request<T>(
   }
 
   const token = localStorage.getItem('access_token');
-  
+
   const headers: HeadersInit = {
     ...(!(fetchOptions.body instanceof FormData) && { 'Content-Type': 'application/json' }),
     ...(token && { Authorization: `Bearer ${token}` }),
@@ -50,6 +71,19 @@ async function request<T>(
       ...fetchOptions,
       headers,
     });
+
+    // Auto-refresh on 401 (once) then retry
+    if (response.status === 401 && !isRetry) {
+      const newToken = await tryRefreshToken();
+      if (newToken) {
+        return request<T>(endpoint, options, true);
+      }
+      // Refresh failed — clear session and signal logout
+      localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
+      localStorage.removeItem('user_info');
+      window.dispatchEvent(new Event('auth:logout'));
+    }
 
     const data = await response.json();
 

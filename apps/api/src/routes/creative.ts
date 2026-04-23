@@ -1,7 +1,10 @@
 import type { FastifyInstance } from "fastify"
 import { randomUUID } from "crypto"
-import { readFile } from "fs/promises"
+import { readFile, writeFile, mkdir, unlink } from "fs/promises"
 import path from "path"
+import { execFile } from "child_process"
+import { promisify } from "util"
+import sharp from "sharp"
 import { prisma } from "../db/prisma.js"
 import { generateCaptions as openaiGenerateCaptions } from "../services/openai.js"
 import {
@@ -24,6 +27,41 @@ import {
   isCloudflareAvailable,
 } from "../services/cloudflareAI.js"
 
+const execFileAsync = promisify(execFile)
+
+// ── Gradient background fallback (no external AI needed) ──────────────────────
+// Generates a rich automotive-themed 1080×1080 gradient PNG using Sharp + SVG.
+async function generateGradientBackground(primaryColor = '#f97316'): Promise<Buffer> {
+  // Parse hex to safe string
+  const color = primaryColor.startsWith('#') ? primaryColor : '#f97316'
+  const svg = `<svg width="1080" height="1080" xmlns="http://www.w3.org/2000/svg">
+    <defs>
+      <linearGradient id="g1" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#0a0c14"/>
+        <stop offset="60%" stop-color="#141824"/>
+        <stop offset="100%" stop-color="#1e1030"/>
+      </linearGradient>
+      <radialGradient id="glow" cx="70%" cy="35%" r="55%">
+        <stop offset="0%" stop-color="${color}" stop-opacity="0.22"/>
+        <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+      </radialGradient>
+      <radialGradient id="glow2" cx="20%" cy="80%" r="40%">
+        <stop offset="0%" stop-color="${color}" stop-opacity="0.10"/>
+        <stop offset="100%" stop-color="#000000" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+    <rect width="1080" height="1080" fill="url(#g1)"/>
+    <rect width="1080" height="1080" fill="url(#glow)"/>
+    <rect width="1080" height="1080" fill="url(#glow2)"/>
+    <!-- Subtle grid lines -->
+    ${Array.from({ length: 12 }, (_, i) => `<line x1="${i * 90}" y1="0" x2="${i * 90}" y2="1080" stroke="white" stroke-opacity="0.02"/>`).join('')}
+    ${Array.from({ length: 12 }, (_, i) => `<line x1="0" y1="${i * 90}" x2="1080" y2="${i * 90}" stroke="white" stroke-opacity="0.02"/>`).join('')}
+    <!-- Diagonal accent -->
+    <line x1="0" y1="1080" x2="1080" y2="0" stroke="${color}" stroke-opacity="0.06" stroke-width="180"/>
+  </svg>`
+  return sharp(Buffer.from(svg)).png().toBuffer()
+}
+
 // Simple in-memory cache: key → {result, expires}
 const captionCache = new Map<string, { result: unknown; expires: number }>()
 
@@ -33,11 +71,12 @@ async function generateCaptionsAI(
   dealerContext: Parameters<typeof openaiGenerateCaptions>[1],
   inventoryContext?: Parameters<typeof openaiGenerateCaptions>[2],
   includeHindi = false,
+  inspirationPosts?: string[],
 ): Promise<GeneratedCaptions> {
   // 1. Try Groq (primary)
   if (isGroqAvailable()) {
     try {
-      return await groqGenerateCaptions(prompt, dealerContext, inventoryContext)
+      return await groqGenerateCaptions(prompt, dealerContext, inventoryContext, inspirationPosts)
     } catch (err) {
       console.error("Groq generation failed, falling back to OpenRouter:", err)
     }
@@ -50,6 +89,7 @@ async function generateCaptionsAI(
         prompt,
         dealerContext,
         inventoryContext,
+        inspirationPosts,
       )
     } catch (err) {
       console.error("OpenRouter generation failed, falling back to mock:", err)
@@ -137,6 +177,20 @@ export default async function creativeRoutes(fastify: FastifyInstance) {
           (dealer.language_preferences as string[] | null) ?? [],
       }
 
+      // Fetch inspiration handles for this dealer (cached posts for AI context)
+      const inspirationHandles = await prisma.inspirationHandle.findMany({
+        where: { dealer_id },
+        select: { posts_cache: true },
+      });
+      const inspirationPosts: string[] = inspirationHandles
+        .flatMap((h) => {
+          const cache = h.posts_cache;
+          if (Array.isArray(cache)) return cache as string[];
+          return [];
+        })
+        .filter(Boolean)
+        .slice(0, 10); // Cap at 10 posts to avoid bloating the prompt
+
       // Match inventory from prompt keywords
       const words = prompt.toLowerCase().split(/\s+/)
       const vehicleMatch = await prisma.inventoryItem.findFirst({
@@ -181,6 +235,7 @@ export default async function creativeRoutes(fastify: FastifyInstance) {
             dealerContext,
             inventoryContext,
             includeHindi,
+            inspirationPosts.length > 0 ? inspirationPosts : undefined,
           )
           captionCache.set(cacheKey, {
             result: captions,
@@ -343,29 +398,26 @@ export default async function creativeRoutes(fastify: FastifyInstance) {
         })
       }
 
-      if (!isCloudflareAvailable()) {
-        return reply.code(503).send({
-          error: {
-            code: "SERVICE_UNAVAILABLE",
-            message: "AI image generation not configured",
-          },
-        })
-      }
-
       const dealer = await prisma.dealer.findUnique({ where: { id: dealer_id } })
       if (!dealer)
         return reply
           .code(404)
           .send({ error: { code: "NOT_FOUND", message: "Dealer not found" } })
 
-      const imagePrompt =
-        `Professional automotive photography for Indian car dealership. ` +
-        `${body.headline.slice(0, 120)}. ` +
-        `Photorealistic, cinematic lighting, 4K quality, no text overlay, ` +
-        `clean background, showroom or open road setting.`
-
       try {
-        const imageBuffer = await cfGenerateImage(imagePrompt.slice(0, 500))
+        // Use Cloudflare SDXL if available, otherwise fall back to a Sharp-rendered
+        // gradient background that looks polished with the dealer overlay.
+        let imageBuffer: Buffer;
+        if (isCloudflareAvailable()) {
+          const imagePrompt =
+            `Professional automotive photography for Indian car dealership. ` +
+            `${body.headline.slice(0, 120)}. ` +
+            `Photorealistic, cinematic lighting, 4K quality, no text overlay, ` +
+            `clean background, showroom or open road setting.`
+          imageBuffer = await cfGenerateImage(imagePrompt.slice(0, 500))
+        } else {
+          imageBuffer = await generateGradientBackground(dealer.primary_color ?? '#f97316')
+        }
         const filePrefix = randomUUID()
 
         const rendered = await renderCreatives({
@@ -476,6 +528,133 @@ export default async function creativeRoutes(fastify: FastifyInstance) {
     })
     return { success: true, data: prompts }
   })
+
+  // POST /v1/creatives/generate-video — FFmpeg-based animated video from still image
+  // Uses Ken Burns effect (slow zoom + pan) on a car creative with caption overlay.
+  fastify.post(
+    '/generate-video',
+    { preHandler: [fastify.authenticate] },
+    async (request, reply) => {
+      const dealer_id = request.user.dealer_id as string;
+      const { prompt, image_id, duration_seconds = 15, aspect_ratio = '9:16' } = request.body as {
+        prompt: string;
+        image_id?: string; // filename from /v1/upload/image
+        duration_seconds?: number;
+        aspect_ratio?: string;
+      };
+
+      if (!prompt?.trim()) {
+        return reply.code(400).send({ error: { code: 'INVALID_INPUT', message: 'prompt is required' } });
+      }
+
+      const dealer = await prisma.dealer.findUnique({ where: { id: dealer_id } });
+      if (!dealer) return reply.code(404).send({ error: { code: 'NOT_FOUND', message: 'Dealer not found' } });
+
+      const dur = Math.min(Math.max(duration_seconds, 5), 60);
+      const [w, h] = aspect_ratio === '16:9' ? [1920, 1080] : aspect_ratio === '1:1' ? [1080, 1080] : [1080, 1920];
+      const fps = 30;
+      const frames = dur * fps;
+
+      const fileId = randomUUID();
+      const videoFilename = `${fileId}.mp4`;
+      await mkdir(CREATIVES_DIR, { recursive: true });
+      const videoPath = path.join(CREATIVES_DIR, videoFilename);
+
+      try {
+        // Prepare base image: use uploaded image or generate gradient background
+        let sourceImagePath: string;
+        if (image_id) {
+          sourceImagePath = path.join(ORIGINALS_DIR, image_id);
+        } else {
+          // Generate a branded gradient image using Sharp
+          const gradientBuf = await generateGradientBackground(dealer.primary_color ?? '#f97316');
+          const tmpImg = path.join(CREATIVES_DIR, `${fileId}_bg.png`);
+          await writeFile(tmpImg, gradientBuf);
+          sourceImagePath = tmpImg;
+        }
+
+        // Prepare base image at target resolution
+        const resizedPath = path.join(CREATIVES_DIR, `${fileId}_resized.jpg`);
+        await sharp(sourceImagePath)
+          .resize(w, h, { fit: 'cover', position: 'center' })
+          .jpeg({ quality: 90 })
+          .toFile(resizedPath);
+
+        // Build text for video overlay — headline from prompt
+        const headline = prompt.length > 60 ? `${prompt.slice(0, 57)}...` : prompt;
+        const safeHeadline = headline.replace(/'/g, '').replace(/:/g, ' ').replace(/[\\]/g, '');
+        const safeName = dealer.name.replace(/'/g, '').replace(/:/g, ' ');
+        const safePhone = (dealer.contact_phone ?? dealer.phone).replace(/[+]/g, '').replace(/\s/g, '');
+
+        // Ken Burns effect: gentle zoom from 1.0 to 1.08 + slight pan
+        // Text overlays: headline at bottom-third, dealer name + phone at bottom
+        const zoomStart = 1.0;
+        const zoomEnd = 1.08;
+        const zoomStep = (zoomEnd - zoomStart) / frames;
+
+        // FFmpeg filter complex with zoompan + text overlays
+        const fontSizeH = Math.round(h * 0.042); // ~45px on 1080 tall
+        const fontSizeSmall = Math.round(h * 0.028);
+        const padBottom = Math.round(h * 0.07);
+        const textY = Math.round(h * 0.62);
+
+        // Using FFmpeg built-in drawtext (no font file needed — uses default)
+        const filterComplex = [
+          `[0:v]scale=${w}:${h}:force_original_aspect_ratio=increase,crop=${w}:${h},`,
+          `zoompan=z='min(zoom+${zoomStep.toFixed(6)},${zoomEnd})':d=${frames}:x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':s=${w}x${h}:fps=${fps},`,
+          `drawtext=text='${safeHeadline}':fontsize=${fontSizeH}:fontcolor=white:`,
+          `x='(w-text_w)/2':y=${textY}:`,
+          `box=1:boxcolor=black@0.55:boxborderw=18:line_spacing=8,`,
+          `drawtext=text='${safeName}  •  ${safePhone}':fontsize=${fontSizeSmall}:fontcolor=white@0.80:`,
+          `x='(w-text_w)/2':y=h-${padBottom}:`,
+          `box=1:boxcolor=black@0.45:boxborderw=10`,
+          `[out]`
+        ].join('')
+
+        const ffmpegArgs = [
+          '-loop', '1',
+          '-i', resizedPath,
+          '-filter_complex', filterComplex,
+          '-map', '[out]',
+          '-t', String(dur),
+          '-c:v', 'libx264',
+          '-preset', 'fast',
+          '-crf', '23',
+          '-pix_fmt', 'yuv420p',
+          '-movflags', '+faststart',
+          '-y',
+          videoPath,
+        ];
+
+        await execFileAsync('ffmpeg', ffmpegArgs, { timeout: 120_000 });
+
+        // Upload video
+        const videoBuf = await readFile(videoPath);
+        const videoUrl = await uploadFile(videoBuf, `creatives/${videoFilename}`, 'video/mp4', CREATIVES_DIR);
+
+        // Clean up temp files
+        await Promise.allSettled([
+          unlink(resizedPath),
+          ...(!image_id ? [unlink(path.join(CREATIVES_DIR, `${fileId}_bg.png`))] : []),
+        ]);
+
+        return {
+          success: true,
+          video_url: videoUrl,
+          duration_seconds: dur,
+          aspect_ratio,
+          thumbnail_url: null,
+        };
+      } catch (err) {
+        fastify.log.error(err, 'Video generation failed');
+        // Clean up any partial files
+        await unlink(videoPath).catch(() => {});
+        return reply.code(500).send({
+          error: { code: 'VIDEO_GENERATION_FAILED', message: 'Video generation failed. Make sure ffmpeg is installed.' },
+        });
+      }
+    },
+  )
 }
 
 function mockCreatives() {

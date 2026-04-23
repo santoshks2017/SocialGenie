@@ -1,5 +1,17 @@
-import { useState, useEffect } from 'react';
-import { Check, AlertCircle, RefreshCw, Trash2, UserPlus, Shield, ShieldOff, ChevronDown, ChevronUp } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Check, AlertCircle, RefreshCw, Trash2, UserPlus, Shield, ShieldOff, ChevronDown, ChevronUp, Link2, Plus } from 'lucide-react';
+
+function FbSvg() {
+  return <svg className="w-5 h-5" viewBox="0 0 24 24" fill="#1877F2"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"/></svg>;
+}
+function IgSvg() {
+  return (
+    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="none" stroke="url(#ig-s)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+      <defs><linearGradient id="ig-s" x1="0%" y1="100%" x2="100%" y2="0%"><stop offset="0%" stopColor="#f09433"/><stop offset="50%" stopColor="#e6683c"/><stop offset="100%" stopColor="#bc1888"/></linearGradient></defs>
+      <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
+    </svg>
+  );
+}
 import { Button } from '../components/ui/Button';
 import { useToast } from '../components/ui/Toast';
 import { useAuth } from '../contexts/AuthContext';
@@ -8,6 +20,9 @@ import { CONFIGURABLE_PERMISSIONS, ROLE_LABELS, isAtLeast } from '../lib/permiss
 import type { Permission } from '../lib/permissions';
 import type { TeamMember } from '../services/users';
 import api from '../services/api';
+import { useSearchParams } from 'react-router-dom';
+
+const API_BASE = import.meta.env.VITE_API_URL?.replace('/v1', '') ?? 'http://localhost:3001';
 
 type PlatformStatus = 'connected' | 'disconnected' | 'expired';
 
@@ -74,12 +89,66 @@ const NOTIFICATION_KEYS = [
   { key: 'monthly_report', label: 'Monthly performance report', defaultOn: true },
 ];
 
-type Tab = 'profile' | 'platforms' | 'preferences' | 'team';
+type Tab = 'profile' | 'platforms' | 'preferences' | 'inspiration' | 'team';
+
+interface InspirationHandle {
+  id: string;
+  platform: string;
+  handle_url: string;
+  handle_name: string | null;
+  posts_cache: string[] | null;
+  last_scraped_at: string | null;
+  created_at: string;
+}
 
 export default function SettingsPage() {
-  const { user } = useAuth();
+  const { user, token } = useAuth();
   const { addToast } = useToast();
-  const [activeTab, setActiveTab] = useState<Tab>('profile');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const oauthHandled = useRef(false);
+
+  // Read initial tab from URL (?tab=platforms) and handle OAuth callbacks
+  const initialTab = (searchParams.get('tab') as Tab | null) ?? 'profile';
+  const [activeTab, setActiveTab] = useState<Tab>(initialTab);
+
+  // Handle OAuth redirect-back: ?oauth_success=facebook,instagram&page_name=...
+  useEffect(() => {
+    if (oauthHandled.current) return;
+    const success = searchParams.get('oauth_success');
+    const error = searchParams.get('oauth_error');
+    const pageName = searchParams.get('page_name');
+
+    if (success) {
+      oauthHandled.current = true;
+      const platforms = success.split(',');
+      const label = platforms.map((p) => p === 'gmb' ? 'Google Business' : p.charAt(0).toUpperCase() + p.slice(1)).join(' + ');
+      addToast({ type: 'success', title: `${label} connected!`, message: pageName ? `Connected as "${pageName}"` : 'Account added successfully.' });
+      setActiveTab('platforms');
+      // Re-fetch dealer profile to get fresh connection data
+      api.get<{ success: boolean; profile: Parameters<typeof setPlatforms>[0] extends Array<infer T> ? never : { platform_connections?: Array<{ platform: string; platform_account_name?: string; is_connected: boolean; token_expires_at?: string }> } }>('/dealer/profile')
+        .then(() => { /* handled by main effect */ })
+        .catch(() => {});
+      // Remove OAuth params from URL without full navigation
+      const cleaned = new URLSearchParams(searchParams);
+      cleaned.delete('oauth_success');
+      cleaned.delete('oauth_error');
+      cleaned.delete('page_name');
+      cleaned.set('tab', 'platforms');
+      setSearchParams(cleaned, { replace: true });
+    } else if (error) {
+      oauthHandled.current = true;
+      const platform = searchParams.get('platform') ?? 'platform';
+      addToast({ type: 'error', title: `${platform} connection failed`, message: decodeURIComponent(error) });
+      setActiveTab('platforms');
+      const cleaned = new URLSearchParams(searchParams);
+      cleaned.delete('oauth_success');
+      cleaned.delete('oauth_error');
+      cleaned.delete('page_name');
+      cleaned.delete('platform');
+      cleaned.set('tab', 'platforms');
+      setSearchParams(cleaned, { replace: true });
+    }
+  }, []);
   const [platforms, setPlatforms] = useState<PlatformInfo[]>(INITIAL_PLATFORMS);
   const [selectedLangs, setSelectedLangs] = useState<string[]>(['en', 'hi']);
   const [selectedRegion, setSelectedRegion] = useState('South India');
@@ -107,6 +176,15 @@ export default function SettingsPage() {
   const [submittingInvite, setSubmittingInvite] = useState(false);
   const [expandedUser, setExpandedUser] = useState<string | null>(null);
   const [editingPerms, setEditingPerms] = useState<Record<string, Record<string, boolean>>>({});
+
+  // Inspiration handles state
+  const [handles, setHandles] = useState<InspirationHandle[]>([]);
+  const [loadingHandles, setLoadingHandles] = useState(false);
+  const [handleUrl, setHandleUrl] = useState('');
+  const [handlePlatform, setHandlePlatform] = useState<'facebook' | 'instagram'>('facebook');
+  const [handleName, setHandleName] = useState('');
+  const [addingHandle, setAddingHandle] = useState(false);
+  const [refreshingId, setRefreshingId] = useState<string | null>(null);
 
   useEffect(() => {
     api.get<{ success: boolean; profile: {
@@ -151,6 +229,15 @@ export default function SettingsPage() {
         .catch(() => addToast({ type: 'error', message: 'Failed to load team members' }))
         .finally(() => setLoadingTeam(false));
     }
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab !== 'inspiration') return;
+    setLoadingHandles(true);
+    api.get<{ success: boolean; handles: InspirationHandle[] }>('/dealer/inspiration-handles')
+      .then((res) => setHandles(res.handles))
+      .catch(() => addToast({ type: 'error', message: 'Failed to load inspiration handles' }))
+      .finally(() => setLoadingHandles(false));
   }, [activeTab]);
 
   const handleInvite = async () => {
@@ -204,10 +291,62 @@ export default function SettingsPage() {
     }
   };
 
+  const handleAddHandle = async () => {
+    if (!handleUrl.trim()) return;
+    setAddingHandle(true);
+    try {
+      const res = await api.post<{ success: boolean; handle: InspirationHandle }>('/dealer/inspiration-handles', {
+        handle_url: handleUrl.trim(),
+        platform: handlePlatform,
+        handle_name: handleName.trim() || undefined,
+      });
+      setHandles((prev) => [res.handle, ...prev]);
+      setHandleUrl('');
+      setHandleName('');
+      addToast({ type: 'success', message: 'Handle added — scraping posts in background' });
+    } catch {
+      addToast({ type: 'error', message: 'Failed to add handle' });
+    } finally {
+      setAddingHandle(false);
+    }
+  };
+
+  const handleDeleteHandle = async (id: string) => {
+    try {
+      await api.delete(`/dealer/inspiration-handles/${id}`);
+      setHandles((prev) => prev.filter((h) => h.id !== id));
+      addToast({ type: 'success', message: 'Handle removed' });
+    } catch {
+      addToast({ type: 'error', message: 'Failed to remove handle' });
+    }
+  };
+
+  const handleRefreshHandle = async (id: string) => {
+    setRefreshingId(id);
+    try {
+      const res = await api.post<{ success: boolean; handle: InspirationHandle; posts_found: number }>(
+        `/dealer/inspiration-handles/${id}/refresh`,
+      );
+      setHandles((prev) => prev.map((h) => h.id === id ? res.handle : h));
+      addToast({ type: 'success', message: `Scraped ${res.posts_found} posts` });
+    } catch {
+      addToast({ type: 'error', message: 'Failed to refresh handle' });
+    } finally {
+      setRefreshingId(null);
+    }
+  };
+
   const handleConnect = (id: string) => {
+    // Step 1: fetch the OAuth redirect URL from the API (JWT auth via header).
+    // Step 2: redirect browser to that URL (Facebook/Google login page).
+    // After the user authorises, the provider calls our backend callback which
+    // processes the token and sends the browser back here with ?oauth_success=...
     api.get<{ success: boolean; redirect_url: string }>(`/platforms/connect/${id}`)
       .then((res) => { window.location.href = res.redirect_url; })
-      .catch(() => setPlatforms((prev) => prev.map((p) => p.id === id ? { ...p, status: 'connected', expiresIn: 60, accountName: 'Reconnected Account' } : p)));
+      .catch((err) => {
+        const msg = (err as { message?: string })?.message ?? 'Could not start connection';
+        addToast({ type: 'error', title: 'Connection failed', message: msg });
+      });
   };
 
   const handleDisconnect = (id: string) => {
@@ -237,8 +376,9 @@ export default function SettingsPage() {
 
   const tabs: { id: Tab; label: string }[] = [
     { id: 'profile', label: 'Dealer Profile' },
-    { id: 'platforms', label: 'Platform Connections' },
+    { id: 'platforms', label: 'Platforms' },
     { id: 'preferences', label: 'Preferences' },
+    { id: 'inspiration', label: 'Inspiration' },
     ...(isAtLeast(user, 'admin') ? [{ id: 'team' as Tab, label: 'Team' }] : []),
   ];
 
@@ -511,6 +651,127 @@ export default function SettingsPage() {
             )}
             <Button onClick={handleSave} className="text-sm">Save Preferences</Button>
           </div>
+        </div>
+      )}
+
+      {/* --- INSPIRATION TAB --- */}
+      {activeTab === 'inspiration' && (
+        <div className="space-y-5">
+          <div className="bg-orange-50 border border-orange-100 rounded-xl p-4 text-sm text-orange-800">
+            <p className="font-medium mb-1">AI Inspiration from Reference Pages</p>
+            <p className="text-orange-700">Add Facebook or Instagram page URLs of dealers or brands you admire. The AI will study their posts and use them as inspiration when generating captions and creatives — tailored to Indian automotive context.</p>
+          </div>
+
+          {/* Add handle form */}
+          <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 space-y-4">
+            <h3 className="font-semibold text-gray-800 flex items-center gap-2">
+              <Link2 className="w-4 h-4 text-orange-500" />
+              Add Reference Handle
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Platform</label>
+                <select
+                  value={handlePlatform}
+                  onChange={(e) => setHandlePlatform(e.target.value as 'facebook' | 'instagram')}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                >
+                  <option value="facebook">Facebook</option>
+                  <option value="instagram">Instagram</option>
+                </select>
+              </div>
+              <div className="md:col-span-2">
+                <label className="text-xs text-gray-500 mb-1 block">Page / Profile URL</label>
+                <input
+                  value={handleUrl}
+                  onChange={(e) => setHandleUrl(e.target.value)}
+                  placeholder={handlePlatform === 'facebook' ? 'https://www.facebook.com/MarutiSuzukiIndia' : 'https://www.instagram.com/hyundaiindia'}
+                  className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">Display Name (optional)</label>
+              <input
+                value={handleName}
+                onChange={(e) => setHandleName(e.target.value)}
+                placeholder="e.g. Maruti Suzuki India"
+                className="w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+              />
+            </div>
+            <Button
+              onClick={handleAddHandle}
+              disabled={!handleUrl.trim() || addingHandle}
+              className="flex items-center gap-1.5 text-sm bg-orange-500 hover:bg-orange-600 text-white"
+            >
+              <Plus className="w-4 h-4" />
+              {addingHandle ? 'Adding...' : 'Add Handle'}
+            </Button>
+          </div>
+
+          {/* Handles list */}
+          {loadingHandles ? (
+            <div className="text-center py-8 text-gray-400 text-sm">Loading handles...</div>
+          ) : handles.length === 0 ? (
+            <div className="text-center py-10 text-gray-400 text-sm bg-white rounded-xl border border-dashed border-gray-200">
+              No reference handles added yet. Add a Facebook or Instagram page above.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {handles.map((h) => (
+                <div key={h.id} className="bg-white rounded-xl border border-gray-100 shadow-sm p-4">
+                  <div className="flex items-start gap-3">
+                    <div className="w-9 h-9 rounded-lg flex items-center justify-center flex-shrink-0 bg-gray-50 border">
+                      {h.platform === 'facebook' ? <FbSvg /> : <IgSvg />}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-gray-900 text-sm truncate">{h.handle_name ?? h.handle_url}</p>
+                      <a
+                        href={h.handle_url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-xs text-blue-500 hover:underline truncate block"
+                      >
+                        {h.handle_url}
+                      </a>
+                      <div className="flex items-center gap-3 mt-1.5">
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${h.platform === 'facebook' ? 'bg-blue-50 text-blue-600' : 'bg-pink-50 text-pink-600'}`}>
+                          {h.platform === 'facebook' ? 'Facebook' : 'Instagram'}
+                        </span>
+                        {h.posts_cache && Array.isArray(h.posts_cache) && h.posts_cache.length > 0 ? (
+                          <span className="text-xs text-green-600 font-medium">{h.posts_cache.length} posts cached</span>
+                        ) : (
+                          <span className="text-xs text-gray-400">No posts cached yet</span>
+                        )}
+                        {h.last_scraped_at && (
+                          <span className="text-xs text-gray-400">
+                            Last scraped {new Date(h.last_scraped_at).toLocaleDateString('en-IN')}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <button
+                        onClick={() => handleRefreshHandle(h.id)}
+                        disabled={refreshingId === h.id}
+                        title="Re-scrape posts"
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors disabled:opacity-50"
+                      >
+                        <RefreshCw className={`w-4 h-4 ${refreshingId === h.id ? 'animate-spin' : ''}`} />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteHandle(h.id)}
+                        title="Remove handle"
+                        className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

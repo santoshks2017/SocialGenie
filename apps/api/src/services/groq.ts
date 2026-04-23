@@ -47,6 +47,7 @@ export async function generateCaptions(
   prompt: string,
   dealer: DealerContext,
   inventory?: InventoryContext,
+  inspirationPosts?: string[],
 ): Promise<GeneratedCaptions> {
   const groq = getClient();
 
@@ -54,9 +55,13 @@ export async function generateCaptions(
     ? `VEHICLE: ${inventory.make ?? ''} ${inventory.model ?? ''} ${inventory.variant ?? ''} | Price: ${inventory.price ? `₹${(inventory.price / 100000).toFixed(2)} Lakhs` : 'not provided — omit pricing'} | Stock: ${inventory.stock_count ?? 'available'}`
     : 'VEHICLE: Use prompt details only.';
 
+  const inspirationBlock = inspirationPosts && inspirationPosts.length > 0
+    ? `\n\nINSPIRATION POSTS (from reference pages — draw from their tone, style, and Indian cultural context, but do NOT copy them):\n${inspirationPosts.slice(0, 5).map((p, i) => `${i + 1}. "${p}"`).join('\n')}`
+    : '';
+
   const userMessage = `DEALER: ${dealer.name}, ${dealer.city} | Phone: ${dealer.phone} | WhatsApp: ${dealer.whatsapp}
 ${vehicleBlock}
-PROMPT: "${prompt}"
+PROMPT: "${prompt}"${inspirationBlock}
 
 Generate 3 caption variants as JSON.`;
 

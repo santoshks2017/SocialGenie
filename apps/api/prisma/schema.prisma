@@ -40,6 +40,7 @@ model Dealer {
   posts                Post[]
   activity_logs        ActivityLog[]
   dealer_users         DealerUser[]
+  inspiration_handles  InspirationHandle[]
 }
 
 // ─── Role-based user accounts ───────────────────────────────────────────────
@@ -275,4 +276,20 @@ model Lead {
   notes              String?
   created_at         DateTime @default(now())
   updated_at         DateTime @updatedAt
+}
+
+model InspirationHandle {
+  id              String    @id @default(uuid())
+  dealer_id       String
+  dealer          Dealer    @relation(fields: [dealer_id], references: [id], onDelete: Cascade)
+  platform        String    // "facebook" | "instagram"
+  handle_url      String
+  handle_name     String?
+  posts_cache     Json?     // Array of scraped post texts/captions
+  last_scraped_at DateTime?
+  created_at      DateTime  @default(now())
+  updated_at      DateTime  @updatedAt
+
+  @@index([dealer_id])
+  @@unique([dealer_id, handle_url])
 }
