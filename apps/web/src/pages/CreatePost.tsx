@@ -106,7 +106,7 @@ export default function CreatePost() {
   const [videoPrompt, setVideoPrompt] = useState('');
   const [videoDuration, setVideoDuration] = useState(15);
   const [videoAspect, setVideoAspect] = useState<'9:16' | '16:9' | '1:1'>('9:16');
-  const [videoStyle, setVideoStyle] = useState<'cinematic' | 'dynamic' | 'minimal'>('cinematic');
+  const [_videoStyle, _setVideoStyle] = useState<'cinematic' | 'dynamic' | 'minimal'>('cinematic');
   const [generatingVideo, setGeneratingVideo] = useState(false);
   const [videoJobId, setVideoJobId] = useState<string | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);

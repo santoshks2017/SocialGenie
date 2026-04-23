@@ -22,8 +22,6 @@ import type { TeamMember } from '../services/users';
 import api from '../services/api';
 import { useSearchParams } from 'react-router-dom';
 
-const API_BASE = import.meta.env.VITE_API_URL?.replace('/v1', '') ?? 'http://localhost:3001';
-
 type PlatformStatus = 'connected' | 'disconnected' | 'expired';
 
 interface PlatformInfo {
@@ -102,7 +100,7 @@ interface InspirationHandle {
 }
 
 export default function SettingsPage() {
-  const { user, token } = useAuth();
+  const { user } = useAuth();
   const { addToast } = useToast();
   const [searchParams, setSearchParams] = useSearchParams();
   const oauthHandled = useRef(false);
@@ -125,7 +123,7 @@ export default function SettingsPage() {
       addToast({ type: 'success', title: `${label} connected!`, message: pageName ? `Connected as "${pageName}"` : 'Account added successfully.' });
       setActiveTab('platforms');
       // Re-fetch dealer profile to get fresh connection data
-      api.get<{ success: boolean; profile: Parameters<typeof setPlatforms>[0] extends Array<infer T> ? never : { platform_connections?: Array<{ platform: string; platform_account_name?: string; is_connected: boolean; token_expires_at?: string }> } }>('/dealer/profile')
+      api.get<{ success: boolean; profile: Parameters<typeof setPlatforms>[0] extends Array<infer _T> ? never : { platform_connections?: Array<{ platform: string; platform_account_name?: string; is_connected: boolean; token_expires_at?: string }> } }>('/dealer/profile')
         .then(() => { /* handled by main effect */ })
         .catch(() => {});
       // Remove OAuth params from URL without full navigation
@@ -226,7 +224,7 @@ export default function SettingsPage() {
       setLoadingTeam(true);
       userService.list()
         .then((res) => setTeamMembers(res.users))
-        .catch(() => addToast({ type: 'error', message: 'Failed to load team members' }))
+        .catch(() => addToast({ type: 'error', title: 'Error', message: 'Failed to load team members' }))
         .finally(() => setLoadingTeam(false));
     }
   }, [activeTab]);
@@ -236,7 +234,7 @@ export default function SettingsPage() {
     setLoadingHandles(true);
     api.get<{ success: boolean; handles: InspirationHandle[] }>('/dealer/inspiration-handles')
       .then((res) => setHandles(res.handles))
-      .catch(() => addToast({ type: 'error', message: 'Failed to load inspiration handles' }))
+      .catch(() => addToast({ type: 'error', title: 'Error', message: 'Failed to load inspiration handles' }))
       .finally(() => setLoadingHandles(false));
   }, [activeTab]);
 
@@ -250,9 +248,9 @@ export default function SettingsPage() {
       setInvitePhone('');
       setInviteName('');
       setInviteRole('user');
-      addToast({ type: 'success', message: 'User invited successfully' });
+      addToast({ type: 'success', title: 'Success', message: 'User invited successfully' });
     } catch {
-      addToast({ type: 'error', message: 'Failed to invite user' });
+      addToast({ type: 'error', title: 'Error', message: 'Failed to invite user' });
     } finally {
       setSubmittingInvite(false);
     }
@@ -262,9 +260,9 @@ export default function SettingsPage() {
     try {
       const res = await userService.setActive(member.id, !member.isActive);
       setTeamMembers((prev) => prev.map((m) => m.id === member.id ? res.user : m));
-      addToast({ type: 'success', message: `User ${res.user.isActive ? 'activated' : 'deactivated'}` });
+      addToast({ type: 'success', title: 'Success', message: `User ${res.user.isActive ? 'activated' : 'deactivated'}` });
     } catch {
-      addToast({ type: 'error', message: 'Failed to update user status' });
+      addToast({ type: 'error', title: 'Error', message: 'Failed to update user status' });
     }
   };
 
@@ -275,9 +273,9 @@ export default function SettingsPage() {
       const res = await userService.updatePermissions(member.id, perms);
       setTeamMembers((prev) => prev.map((m) => m.id === member.id ? res.user : m));
       setEditingPerms((prev) => { const next = { ...prev }; delete next[member.id]; return next; });
-      addToast({ type: 'success', message: 'Permissions updated' });
+      addToast({ type: 'success', title: 'Success', message: 'Permissions updated' });
     } catch {
-      addToast({ type: 'error', message: 'Failed to update permissions' });
+      addToast({ type: 'error', title: 'Error', message: 'Failed to update permissions' });
     }
   };
 
@@ -285,9 +283,9 @@ export default function SettingsPage() {
     try {
       await userService.remove(member.id);
       setTeamMembers((prev) => prev.filter((m) => m.id !== member.id));
-      addToast({ type: 'success', message: 'User removed' });
+      addToast({ type: 'success', title: 'Success', message: 'User removed' });
     } catch {
-      addToast({ type: 'error', message: 'Failed to remove user' });
+      addToast({ type: 'error', title: 'Error', message: 'Failed to remove user' });
     }
   };
 
@@ -303,9 +301,9 @@ export default function SettingsPage() {
       setHandles((prev) => [res.handle, ...prev]);
       setHandleUrl('');
       setHandleName('');
-      addToast({ type: 'success', message: 'Handle added — scraping posts in background' });
+      addToast({ type: 'success', title: 'Success', message: 'Handle added — scraping posts in background' });
     } catch {
-      addToast({ type: 'error', message: 'Failed to add handle' });
+      addToast({ type: 'error', title: 'Error', message: 'Failed to add handle' });
     } finally {
       setAddingHandle(false);
     }
@@ -315,9 +313,9 @@ export default function SettingsPage() {
     try {
       await api.delete(`/dealer/inspiration-handles/${id}`);
       setHandles((prev) => prev.filter((h) => h.id !== id));
-      addToast({ type: 'success', message: 'Handle removed' });
+      addToast({ type: 'success', title: 'Success', message: 'Handle removed' });
     } catch {
-      addToast({ type: 'error', message: 'Failed to remove handle' });
+      addToast({ type: 'error', title: 'Error', message: 'Failed to remove handle' });
     }
   };
 
@@ -328,9 +326,9 @@ export default function SettingsPage() {
         `/dealer/inspiration-handles/${id}/refresh`,
       );
       setHandles((prev) => prev.map((h) => h.id === id ? res.handle : h));
-      addToast({ type: 'success', message: `Scraped ${res.posts_found} posts` });
+      addToast({ type: 'success', title: 'Success', message: `Scraped ${res.posts_found} posts` });
     } catch {
-      addToast({ type: 'error', message: 'Failed to refresh handle' });
+      addToast({ type: 'error', title: 'Error', message: 'Failed to refresh handle' });
     } finally {
       setRefreshingId(null);
     }

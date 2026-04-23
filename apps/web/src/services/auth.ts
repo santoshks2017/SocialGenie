@@ -1,10 +1,10 @@
 import api from './api';
-import type {
-  Dealer,
-  DealerFormData,
-  PlatformConnection,
-  ApiResponse,
-} from '@cardeko/shared';
+
+// Local type stubs — avoids workspace package resolution issues on Vercel
+interface Dealer { id: string; name: string; phone: string; city: string; [key: string]: unknown }
+interface DealerFormData { name?: string; city?: string; [key: string]: unknown }
+interface PlatformConnection { id: string; platform: string; [key: string]: unknown }
+interface ApiResponse<T = unknown> { success: boolean; data?: T; message?: string }
 
 export interface LoginRequest {
   phone: string;

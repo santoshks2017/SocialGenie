@@ -206,7 +206,6 @@ export default function InventoryPage() {
   };
 
   const bulkGeneratePost = () => {
-    const ids = [...selected];
     const names = vehicles.filter((v) => selected.has(v.id)).map((v) => `${v.make} ${v.model}`).join(', ');
     navigate(`/create?prompt=Showcase+these+vehicles+for+sale:+${encodeURIComponent(names)}`);
     setSelected(new Set());
