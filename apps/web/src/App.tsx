@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import {
   Car, Plus, MessageSquare, Bell,
   Calendar, BarChart2, Package, Zap, Settings,
@@ -17,6 +17,10 @@ import InventoryPage from './pages/Inventory';
 import BoostPage from './pages/Boost';
 import AnalyticsPage from './pages/Analytics';
 import SettingsPage from './pages/SettingsPage';
+import LoginPage from './pages/LoginPage';
+import AuthCallbackPage from './pages/AuthCallbackPage';
+import ConnectProfilesPage from './pages/ConnectProfilesPage';
+import type { UserInfo } from './lib/permissions';
 
 // ─── Nav config ───────────────────────────────────────────────────────────────
 const NAV_ITEMS = [
@@ -504,6 +508,47 @@ function AppLayout({ children, fullBleed }: { children: React.ReactNode; fullBle
 }
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
+  const { user, token } = useAuth();
+  const location = useLocation();
+  if (!user && !token) {
+    return <Navigate to="/login" state={{ from: location }} replace />;
+  }
+  return <>{children}</>;
+}
+
+// Inner component that has access to AuthContext
+function AppRoutes() {
+  const { loginWithToken } = useAuth();
+
+  const handleLogin = (token: string, refresh: string, user: UserInfo) => {
+    loginWithToken(token, refresh, user);
+  };
+
+  return (
+    <Routes>
+      {/* Public routes */}
+      <Route path="/login" element={<LoginPublicRoute><LoginPage onLogin={handleLogin} /></LoginPublicRoute>} />
+      <Route path="/auth/callback" element={<AuthCallbackPage onLogin={handleLogin} />} />
+
+      {/* Protected routes */}
+      <Route path="/onboarding" element={<RequireAuth><ConnectProfilesPage /></RequireAuth>} />
+      <Route path="/" element={<RequireAuth><AppLayout><Dashboard /></AppLayout></RequireAuth>} />
+      <Route path="/create" element={<RequireAuth><AppLayout fullBleed><CreatePost /></AppLayout></RequireAuth>} />
+      <Route path="/calendar" element={<RequireAuth><AppLayout><CalendarPage /></AppLayout></RequireAuth>} />
+      <Route path="/inbox" element={<RequireAuth><AppLayout><InboxPage /></AppLayout></RequireAuth>} />
+      <Route path="/inventory" element={<RequireAuth><AppLayout><InventoryPage /></AppLayout></RequireAuth>} />
+      <Route path="/analytics" element={<RequireAuth><AppLayout><AnalyticsPage /></AppLayout></RequireAuth>} />
+      <Route path="/boost" element={<RequireAuth><AppLayout><BoostPage /></AppLayout></RequireAuth>} />
+      <Route path="/settings" element={<RequireAuth><AppLayout><SettingsPage /></AppLayout></RequireAuth>} />
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
+  );
+}
+
+// Redirect logged-in users away from /login
+function LoginPublicRoute({ children }: { children: React.ReactNode }) {
+  const { user, token } = useAuth();
+  if (user && token) return <Navigate to="/" replace />;
   return <>{children}</>;
 }
 
@@ -512,18 +557,7 @@ export default function App() {
     <ToastProvider>
       <AuthProvider>
         <Router>
-          <Routes>
-            <Route path="/onboarding" element={<Navigate to="/" replace />} />
-            <Route path="/" element={<RequireAuth><AppLayout><Dashboard /></AppLayout></RequireAuth>} />
-            <Route path="/create" element={<RequireAuth><AppLayout fullBleed><CreatePost /></AppLayout></RequireAuth>} />
-            <Route path="/calendar" element={<RequireAuth><AppLayout><CalendarPage /></AppLayout></RequireAuth>} />
-            <Route path="/inbox" element={<RequireAuth><AppLayout><InboxPage /></AppLayout></RequireAuth>} />
-            <Route path="/inventory" element={<RequireAuth><AppLayout><InventoryPage /></AppLayout></RequireAuth>} />
-            <Route path="/analytics" element={<RequireAuth><AppLayout><AnalyticsPage /></AppLayout></RequireAuth>} />
-            <Route path="/boost" element={<RequireAuth><AppLayout><BoostPage /></AppLayout></RequireAuth>} />
-            <Route path="/settings" element={<RequireAuth><AppLayout><SettingsPage /></AppLayout></RequireAuth>} />
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
+          <AppRoutes />
         </Router>
       </AuthProvider>
     </ToastProvider>
