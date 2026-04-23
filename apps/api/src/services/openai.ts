@@ -1,8 +1,11 @@
 import OpenAI from "openai"
 
-let client: OpenAI | null = null
+// verbatimModuleSyntax requires InstanceType<typeof X> instead of X as a type annotation
+type OpenAIClient = InstanceType<typeof OpenAI>
 
-function getClient(): OpenAI {
+let client: OpenAIClient | null = null
+
+function getClient(): OpenAIClient {
   if (!client) {
     const apiKey = process.env["OPENAI_API_KEY"]
     if (!apiKey) throw new Error("OPENAI_API_KEY is not set")
@@ -131,7 +134,7 @@ Generate 3 caption variants as specified.`
 }
 
 async function generateHindiVariants(
-  openai: OpenAI,
+  openai: OpenAIClient,
   variants: CaptionVariant[],
   dealer: DealerContext,
 ): Promise<[string, string, string]> {
