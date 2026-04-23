@@ -9,33 +9,28 @@ interface AuthContextType {
   token: string | null;
   isLoading: boolean;
   login: (phone: string, otp: string) => Promise<UserInfo>;
+  loginWithToken: (token: string, refresh: string, user: UserInfo) => void;
   logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-// Shown when auth is bypassed and no real user is logged in
-const DEMO_USER: UserInfo = {
-  id: 'demo',
-  name: 'Demo User',
-  role: 'owner',
-  dealer_id: null,
-  permissions: {
-    create_post: true, approve_post: true, publish_post: true,
-    run_boost: true, manage_inventory: true, view_reports: true,
-    view_inbox: true, reply_inbox: true, manage_users: true, view_billing: true,
-  },
-  onboarding_completed: true,
-  onboarding_step: 4,
-};
-
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [token, setToken] = useState<string | null>(() => localStorage.getItem('access_token'));
   const [user, setUser] = useState<UserInfo | null>(() => {
     const stored = localStorage.getItem('user_info');
-    return stored ? (JSON.parse(stored) as UserInfo) : DEMO_USER;
+    if (!stored) return null;
+    try { return JSON.parse(stored) as UserInfo; } catch { return null; }
   });
   const [isLoading, setIsLoading] = useState(false);
+
+  const loginWithToken = useCallback((accessToken: string, refreshToken: string, userInfo: UserInfo) => {
+    localStorage.setItem('access_token', accessToken);
+    if (refreshToken) localStorage.setItem('refresh_token', refreshToken);
+    localStorage.setItem('user_info', JSON.stringify(userInfo));
+    setToken(accessToken);
+    setUser(userInfo);
+  }, []);
 
   const login = useCallback(async (phone: string, otp: string): Promise<UserInfo> => {
     setIsLoading(true);
@@ -50,16 +45,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         onboarding_completed: res.user.onboarding_completed,
         onboarding_step: res.user.onboarding_step,
       };
-      localStorage.setItem('access_token', res.token);
-      localStorage.setItem('refresh_token', res.refreshToken);
-      localStorage.setItem('user_info', JSON.stringify(userInfo));
-      setToken(res.token);
-      setUser(userInfo);
+      loginWithToken(res.token, res.refreshToken, userInfo);
       return userInfo;
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [loginWithToken]);
 
   const logout = useCallback(() => {
     localStorage.removeItem('access_token');
@@ -114,10 +105,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser(userInfo);
       })
       .catch(() => { /* token may be invalid; JWT refresh effect handles logout */ });
-  }, [token]);
+  }, [token, user]);
 
   return (
-    <AuthContext.Provider value={{ user, token, isLoading, login, logout }}>
+    <AuthContext.Provider value={{ user, token, isLoading, login, loginWithToken, logout }}>
       {children}
     </AuthContext.Provider>
   );

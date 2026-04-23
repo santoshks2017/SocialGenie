@@ -250,6 +250,67 @@ export default async function authRoutes(fastify: FastifyInstance) {
     }
   })
 
+  // POST /v1/auth/demo — creates a real session for demo/exploration without OTP
+  fastify.post("/demo", async (_request, _reply) => {
+    const DEMO_PHONE = "9000000000";
+
+    let dealer = await prisma.dealer.findFirst({ where: { phone: DEMO_PHONE } });
+    if (!dealer) {
+      dealer = await prisma.dealer.create({
+        data: {
+          phone: DEMO_PHONE,
+          name: "Demo Motors",
+          city: "Mumbai",
+          state: "Maharashtra",
+          contact_phone: "+91 90000 00000",
+          whatsapp_number: "+91 90000 00000",
+          brands: ["Maruti Suzuki", "Hyundai", "Tata"],
+          primary_color: "#f97316",
+          onboarding_completed: true,
+          onboarding_step: 4,
+        },
+      });
+    }
+
+    let demoUser = await prisma.dealerUser.findFirst({ where: { dealer_id: dealer.id } });
+    if (!demoUser) {
+      demoUser = await prisma.dealerUser.create({
+        data: {
+          phone: DEMO_PHONE,
+          name: "Demo User",
+          role: ROLES.ADMIN,
+          dealer_id: dealer.id,
+          is_active: true,
+        },
+      });
+    }
+
+    const permissions = resolvePermissions(demoUser.role);
+    const payload: JwtUser = {
+      dealer_user_id: demoUser.id,
+      dealer_id: demoUser.dealer_id,
+      role: demoUser.role as Role,
+      phone: DEMO_PHONE,
+      permissions,
+    };
+    const token = fastify.jwt.sign(payload, { expiresIn: "30d" });
+    const refreshToken = fastify.jwt.sign(payload, { expiresIn: "90d" });
+
+    return {
+      token,
+      refreshToken,
+      user: {
+        id: demoUser.id,
+        name: demoUser.name,
+        role: demoUser.role,
+        dealer_id: demoUser.dealer_id,
+        permissions,
+        onboarding_completed: dealer.onboarding_completed,
+        onboarding_step: dealer.onboarding_step,
+      },
+    };
+  });
+
   // POST /v1/auth/refresh
   fastify.post("/refresh", async (request, reply) => {
     const { refreshToken } = request.body as { refreshToken?: string }
