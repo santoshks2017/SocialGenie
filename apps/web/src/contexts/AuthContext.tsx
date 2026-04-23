@@ -20,7 +20,11 @@ const DEMO_USER: UserInfo = {
   name: 'Demo User',
   role: 'owner',
   dealer_id: null,
-  permissions: {},
+  permissions: {
+    create_post: true, approve_post: true, publish_post: true,
+    run_boost: true, manage_inventory: true, view_reports: true,
+    view_inbox: true, reply_inbox: true, manage_users: true, view_billing: true,
+  },
   onboarding_completed: true,
   onboarding_step: 4,
 };

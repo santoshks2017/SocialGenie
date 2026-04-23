@@ -10,7 +10,6 @@ import api from './services/api';
 import { ToastProvider } from './components/ui/Toast';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 
-import Onboarding from './pages/Onboarding';
 import CreatePost from './pages/CreatePost';
 import CalendarPage from './pages/Calendar';
 import InboxPage from './pages/InboxPage';
