@@ -94,6 +94,8 @@ export default function CreatePost() {
   const [uploadedVideoName, setUploadedVideoName] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [toneActive, setToneActive] = useState<'hinglish' | 'english' | 'hindi'>('hinglish');
+  const [mediaTab, setMediaTab] = useState<'inspiration' | 'upload' | 'ai'>('upload');
+  const [inspirationUrl, setInspirationUrl] = useState('');
   const [aiImageUrls, setAiImageUrls] = useState<(string | null)[]>([null, null, null]);
   const [isGeneratingImages, setIsGeneratingImages] = useState(false);
   const [imageLoadingStates, setImageLoadingStates] = useState<boolean[]>([false, false, false]);
@@ -192,7 +194,10 @@ export default function CreatePost() {
       setVariants(res);
       setSelectedVariant(0);
       setCaption(res.captions[0]?.caption_text ?? '');
-      generateImagesForVariants(res.captions, prompt);
+      
+      if (mediaTab === 'ai') {
+        generateImagesForVariants(res.captions, prompt);
+      }
     } catch (err) {
       console.error(err);
       addToast({ type: 'error', title: 'Generation failed', message: 'Could not generate captions. Check API logs.' });
@@ -542,18 +547,18 @@ export default function CreatePost() {
 
   // ─── Main layout ──────────────────────────────────────────────────────────
   return (
-    <div className="h-full flex flex-col overflow-hidden bg-[#F5F0EA]">
+    <div className="h-full flex flex-col overflow-hidden bg-[#f4f5f7]">
 
-      {/* ── Top breadcrumb bar ── */}
+      {/* ── Top bar ── */}
       <div className="flex items-center gap-3 px-5 py-3 bg-white border-b border-stone-200 shrink-0">
         <NavLink to="/" className="text-stone-400 hover:text-stone-700 transition-colors">
           <ArrowLeft className="w-4 h-4" />
         </NavLink>
-        <span className="text-stone-300 text-sm">/</span>
+        <span className="text-stone-300">/</span>
         <span className="text-stone-900 text-sm font-semibold">Create Post</span>
         {variants && (
-          <span className="ml-auto flex items-center gap-1.5 text-xs text-stone-400">
-            <span className="w-1.5 h-1.5 bg-green-400 rounded-full" /> Auto-saved
+          <span className="ml-auto flex items-center gap-1.5 text-xs text-green-600 font-medium">
+            <span className="w-1.5 h-1.5 bg-green-500 rounded-full" /> Auto-saved
           </span>
         )}
       </div>
@@ -561,422 +566,487 @@ export default function CreatePost() {
       <div className="flex flex-1 overflow-hidden">
 
         {/* ════════════════════════════════════════════════════════════════════
-            LEFT PANEL — inputs + generated post content (scrollable)
+            MAIN CONTENT — three stacked sections, scrollable (~85% width)
         ════════════════════════════════════════════════════════════════════ */}
-        <div className="w-[520px] shrink-0 bg-white border-r border-stone-200 flex flex-col overflow-hidden">
-          <div className="flex-1 overflow-y-auto p-5 space-y-5">
+        <div className="flex-1 overflow-y-auto p-8 space-y-6 min-w-0 max-w-5xl mx-auto">
 
-            {/* 1 ── Post Type */}
-            <section>
-              <p className="text-[11px] font-extrabold text-stone-400 uppercase tracking-widest mb-3">Post type</p>
-              <div className="grid grid-cols-5 gap-2">
-                {POST_TYPES.map((type) => {
-                  const active = selectedPostType === type.id;
-                  return (
-                    <button
-                      key={type.id}
-                      onClick={() => handleTypeSelect(type)}
-                      className={`flex flex-col items-center gap-1.5 p-2.5 rounded-xl border transition-all ${
-                        active ? 'border-orange-300 bg-orange-50 shadow-sm' : 'border-stone-100 hover:border-stone-200 hover:bg-stone-50'
-                      }`}
-                    >
-                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${active ? 'bg-orange-100' : type.bg}`}>
-                        <type.icon className={`w-4 h-4 ${active ? 'text-orange-600' : type.color}`} />
-                      </div>
-                      <p className={`text-[10px] font-semibold leading-tight text-center ${active ? 'text-orange-700' : 'text-stone-600'}`}>
-                        {type.label}
-                      </p>
-                    </button>
-                  );
-                })}
+          {/* ── SECTION 1: Describe your post ── */}
+          <div className="bg-white rounded-2xl border border-stone-200 shadow-sm p-6 space-y-5">
+            <div>
+              <h2 className="text-lg font-bold text-stone-900 mb-1">What exactly should be the post?</h2>
+              <p className="text-sm text-stone-500">Describe your post in detail or choose a post type for ideas.</p>
+            </div>
+            
+            <div className="bg-stone-50 border-2 border-stone-200 rounded-2xl p-2 focus-within:border-orange-400 focus-within:bg-white transition-colors">
+              <div className="flex items-center justify-between mb-2 px-3 pt-2">
+                 <select 
+                   className="bg-transparent text-sm font-bold text-stone-800 focus:outline-none cursor-pointer w-full md:w-auto"
+                   value={selectedPostType || ''}
+                   onChange={(e) => {
+                     const t = POST_TYPES.find(type => type.id === e.target.value);
+                     if (t) handleTypeSelect(t);
+                   }}
+                 >
+                   <option value="" disabled>✨ Select a post type...</option>
+                   {POST_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+                 </select>
               </div>
-            </section>
-
-            {/* 2 ── Prompt + suggestions */}
-            <section>
-              <p className="text-[11px] font-extrabold text-stone-400 uppercase tracking-widest mb-3">Describe your post</p>
               <textarea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
-                placeholder="e.g. Diwali special — ₹50,000 discount on all Hyundai models this festive season…"
-                className="w-full h-24 p-4 text-sm border border-stone-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-orange-400 bg-stone-50 placeholder:text-stone-400 leading-relaxed"
+                placeholder="Describe your offer in detail — include vehicle name, discount amount, validity, and any special offer…"
+                className="w-full h-32 px-3 py-2 bg-transparent text-sm text-stone-800 resize-none focus:outline-none placeholder:text-stone-400 leading-relaxed"
                 maxLength={500}
               />
-              <div className="flex items-center justify-between mt-1">
-                <span className="text-[11px] text-stone-400">{prompt.length} / 500</span>
+              <div className="flex items-center justify-between px-3 pb-2">
+                <span className="text-[11px] text-stone-400">{prompt.length} / 500 characters</span>
                 {prompt.trim() && (
-                  <button onClick={() => setPrompt('')} className="text-[11px] text-stone-400 hover:text-stone-600 transition-colors">Clear</button>
+                  <button onClick={() => setPrompt('')} className="text-[11px] text-stone-400 hover:text-red-500 transition-colors font-medium">
+                    Clear
+                  </button>
                 )}
               </div>
-              {activeChips.length > 0 && (
-                <div className="mt-3 space-y-1.5">
-                  <p className="text-[10px] font-semibold text-stone-400 uppercase tracking-wide">Quick suggestions</p>
-                  {activeChips.map((chip) => (
+            </div>
+
+            {/* Suggestion cards — shown when post type is selected */}
+            {selectedPostType && activeChips.length > 0 && (
+              <div className="pt-2">
+                <p className="text-[11px] font-extrabold text-stone-400 uppercase tracking-widest mb-3">Quick Suggestions</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {activeChips.map((chip, idx) => (
                     <button
-                      key={chip}
+                      key={idx}
                       onClick={() => setPrompt(chip)}
-                      className="w-full text-left text-xs px-3 py-2.5 rounded-xl border border-stone-100 bg-stone-50 hover:bg-orange-50 hover:border-orange-200 transition-colors text-stone-600 truncate"
+                      className={`text-left p-4 rounded-xl border-2 transition-all ${
+                        prompt === chip
+                          ? 'border-orange-500 bg-orange-50 shadow-md shadow-orange-100'
+                          : 'border-stone-200 bg-white hover:border-orange-300 hover:shadow-sm'
+                      }`}
                     >
-                      {chip}
+                      <p className={`text-sm leading-relaxed ${prompt === chip ? 'text-orange-900 font-bold' : 'text-stone-700'}`}>{chip}</p>
                     </button>
                   ))}
                 </div>
-              )}
-            </section>
-
-            {/* 3 ── Media */}
-            <section>
-              <p className="text-[11px] font-extrabold text-stone-400 uppercase tracking-widest mb-3">
-                Add media <span className="normal-case font-normal">(optional)</span>
-              </p>
-              <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
-              <input ref={videoInputRef} type="file" accept="video/*" className="hidden" onChange={handleVideoUpload} />
-              {uploadedImageUrl ? (
-                <div className="relative rounded-xl overflow-hidden border border-stone-200 group">
-                  <img src={uploadedImageUrl} alt="Uploaded" className="w-full h-32 object-cover" />
-                  <button onClick={clearMedia} className="absolute top-2 right-2 w-6 h-6 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center">
-                    <X className="w-3 h-3 text-white" />
-                  </button>
-                  <span className="absolute bottom-2 left-2 text-[10px] text-white/80 font-semibold bg-black/40 px-2 py-0.5 rounded-full">Photo attached</span>
-                </div>
-              ) : uploadedVideoName ? (
-                <div className="flex items-center gap-3 p-3 rounded-xl border border-stone-200 bg-stone-50">
-                  <Video className="w-5 h-5 text-teal-500 shrink-0" />
-                  <p className="text-xs text-stone-600 truncate flex-1">{uploadedVideoName}</p>
-                  <button onClick={clearMedia}><X className="w-3.5 h-3.5 text-stone-400 hover:text-red-500" /></button>
-                </div>
-              ) : (
-                <div className="flex gap-2">
-                  <button onClick={() => imageInputRef.current?.click()} disabled={isUploading}
-                    className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-stone-200 hover:border-orange-300 hover:bg-orange-50 transition-colors text-stone-400 hover:text-orange-600 disabled:opacity-40 text-sm font-medium">
-                    <ImagePlus className="w-4 h-4" /> {isUploading ? 'Uploading…' : 'Photo'}
-                  </button>
-                  <button onClick={() => videoInputRef.current?.click()} disabled={isUploading}
-                    className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-stone-200 hover:border-orange-300 hover:bg-orange-50 transition-colors text-stone-400 hover:text-orange-600 disabled:opacity-40 text-sm font-medium">
-                    <Video className="w-4 h-4" /> {isUploading ? 'Uploading…' : 'Video'}
-                  </button>
-                </div>
-              )}
-            </section>
-
-            {/* 4 ── Platforms */}
-            <section>
-              <p className="text-[11px] font-extrabold text-stone-400 uppercase tracking-widest mb-3">Publish to</p>
-              <div className="flex gap-2">
-                {PLATFORMS.map(({ id, label, icon: Icon, color, dot }) => (
-                  <button key={id} onClick={() => togglePlatform(id)}
-                    className={`flex-1 flex flex-col items-center gap-1.5 py-2.5 rounded-xl border-2 transition-all ${
-                      selectedPlatforms.includes(id) ? 'border-stone-300 bg-stone-50' : 'border-stone-100 opacity-40 hover:opacity-70'
-                    }`}
-                  >
-                    <Icon className={`w-4 h-4 ${color}`} />
-                    <div className="flex items-center gap-1">
-                      {selectedPlatforms.includes(id) && <div className={`w-1.5 h-1.5 rounded-full ${dot}`} />}
-                      <span className="text-[10px] font-semibold text-stone-600">{id === 'gmb' ? 'Google' : label}</span>
-                    </div>
-                  </button>
-                ))}
               </div>
-            </section>
+            )}
+          </div>
 
-            {/* ── Generated content — shown after AI generation ── */}
-            {(variants || isGenerating) && (
-              <div className="border-t border-stone-100 pt-5 space-y-4">
+          {/* ── SECTION 2: Media ── */}
+          <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+            <div className="px-6 py-5 border-b border-stone-100 flex items-center justify-between">
+              <div>
+                <h2 className="text-lg font-bold text-stone-900 mb-1">Creative / Media</h2>
+                <p className="text-sm text-stone-500">Optional — add your own image or let AI create one</p>
+              </div>
+              <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest bg-stone-100 px-2.5 py-1 rounded-full">Optional</span>
+            </div>
+            
+            <div className="flex flex-wrap p-4 gap-2 bg-stone-50/50 border-b border-stone-100">
+              {([
+                { id: 'inspiration', icon: Sparkles, label: 'Add Inspiration', sub: 'Reference a creative' },
+                { id: 'upload',      icon: ImagePlus, label: 'Upload Creative',  sub: 'Your own image/video' },
+                { id: 'ai',          icon: Wand2,     label: 'Generate with AI', sub: 'Let AI design it'    },
+              ] as const).map(({ id, icon: Icon, label, sub }) => (
+                <button
+                  key={id}
+                  onClick={() => setMediaTab(id)}
+                  className={`flex-1 flex flex-col items-start p-4 rounded-xl border-2 transition-all min-w-[150px] ${
+                    mediaTab === id
+                      ? 'border-orange-500 bg-orange-50 shadow-sm'
+                      : 'border-stone-200 bg-white hover:border-stone-300'
+                  }`}
+                >
+                  <Icon className={`w-5 h-5 mb-2 ${mediaTab === id ? 'text-orange-600' : 'text-stone-400'}`} />
+                  <p className={`text-sm font-bold ${mediaTab === id ? 'text-orange-800' : 'text-stone-700'}`}>{label}</p>
+                  <p className={`text-xs mt-1 ${mediaTab === id ? 'text-orange-600' : 'text-stone-500'}`}>{sub}</p>
+                </button>
+              ))}
+            </div>
 
-                {/* Caption variant tabs */}
-                {isGenerating ? (
-                  <div className="space-y-3">
-                    <div className="h-3 w-28 bg-stone-100 rounded animate-pulse" />
-                    <div className="h-28 bg-stone-100 rounded-xl animate-pulse" />
-                    <div className="flex gap-2">
-                      {[0,1,2,3].map(i => <div key={i} className="h-6 w-20 bg-stone-100 rounded-full animate-pulse" />)}
+            <div className="p-6">
+              {/* Inspiration tab */}
+              {mediaTab === 'inspiration' && (
+                <div className="space-y-4 max-w-2xl">
+                  <p className="text-sm text-stone-500">Paste a link to a post, image, or creative that you want to use as reference. Our AI will study its style and adapt it for your dealership.</p>
+                  <input
+                    type="url"
+                    value={inspirationUrl}
+                    onChange={(e) => setInspirationUrl(e.target.value)}
+                    placeholder="https://instagram.com/p/... or paste any image URL"
+                    className="w-full px-4 py-3 border-2 border-stone-200 rounded-xl text-sm focus:outline-none focus:border-orange-400 placeholder:text-stone-400 transition-colors"
+                  />
+                  {inspirationUrl && (
+                    <div className="flex items-center gap-2 p-3 bg-teal-50 border border-teal-200 rounded-xl">
+                      <Check className="w-4 h-4 text-teal-600 shrink-0" />
+                      <p className="text-xs text-teal-700 font-medium">Inspiration URL saved — AI will reference this style</p>
                     </div>
-                  </div>
-                ) : variants && (
-                  <>
-                    {/* Style tabs */}
-                    <div>
-                      <p className="text-[11px] font-extrabold text-stone-400 uppercase tracking-widest mb-2">Caption style</p>
-                      <div className="flex gap-1.5">
-                        {variants.captions.map((v, i) => (
-                          <button key={i} onClick={() => handleVariantSelect(i)}
-                            className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] font-bold border transition-all ${
-                              selectedVariant === i
-                                ? 'bg-orange-600 text-white border-orange-600'
-                                : 'bg-white text-stone-600 border-stone-200 hover:border-orange-300'
-                            }`}
+                  )}
+                </div>
+              )}
+
+              {/* Upload tab */}
+              {mediaTab === 'upload' && (
+                <div className="max-w-2xl">
+                  <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
+                  <input ref={videoInputRef} type="file" accept="video/*" className="hidden" onChange={handleVideoUpload} />
+                  {uploadedImageUrl ? (
+                    <div className="relative rounded-xl overflow-hidden border-2 border-stone-200 group w-64 h-64">
+                      <img src={uploadedImageUrl} alt="Uploaded" className="w-full h-full object-cover" />
+                      <button onClick={clearMedia} className="absolute top-3 right-3 w-8 h-8 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center transition-colors">
+                        <X className="w-4 h-4 text-white" />
+                      </button>
+                      <span className="absolute bottom-3 left-3 text-xs text-white font-bold bg-black/50 px-3 py-1.5 rounded-full">Photo attached</span>
+                    </div>
+                  ) : uploadedVideoName ? (
+                    <div className="flex items-center gap-3 p-4 rounded-xl border-2 border-stone-200 bg-stone-50">
+                      <Video className="w-6 h-6 text-teal-500 shrink-0" />
+                      <p className="text-sm text-stone-600 truncate flex-1">{uploadedVideoName}</p>
+                      <button onClick={clearMedia}><X className="w-5 h-5 text-stone-400 hover:text-red-500 transition-colors" /></button>
+                    </div>
+                  ) : (
+                    <div className="flex gap-4">
+                      <button onClick={() => imageInputRef.current?.click()} disabled={isUploading}
+                        className="flex-1 flex flex-col items-center gap-3 py-8 rounded-xl border-2 border-dashed border-stone-300 hover:border-orange-400 hover:bg-orange-50 transition-colors text-stone-400 hover:text-orange-600 disabled:opacity-40">
+                        <ImagePlus className="w-8 h-8" />
+                        <span className="text-sm font-semibold">{isUploading ? 'Uploading…' : 'Upload Photo'}</span>
+                        <span className="text-xs">JPG, PNG, WEBP</span>
+                      </button>
+                      <button onClick={() => videoInputRef.current?.click()} disabled={isUploading}
+                        className="flex-1 flex flex-col items-center gap-3 py-8 rounded-xl border-2 border-dashed border-stone-300 hover:border-orange-400 hover:bg-orange-50 transition-colors text-stone-400 hover:text-orange-600 disabled:opacity-40">
+                        <Video className="w-8 h-8" />
+                        <span className="text-sm font-semibold">{isUploading ? 'Uploading…' : 'Upload Video'}</span>
+                        <span className="text-xs">MP4, MOV</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* AI Generate tab */}
+              {mediaTab === 'ai' && (
+                <div className="space-y-6 max-w-3xl">
+                  {!variants && !isGenerating ? (
+                    <div className="bg-gradient-to-r from-orange-500 to-amber-500 rounded-xl p-6 text-white shadow-md">
+                      <div className="flex items-start gap-4">
+                        <Wand2 className="w-8 h-8 shrink-0 mt-1 text-orange-100" />
+                        <div>
+                          <h3 className="font-bold text-lg mb-1">Let AI design your post</h3>
+                          <p className="text-orange-100 text-sm mb-5">Click below to generate both the post content and 3 beautifully designed automotive creatives based on your description.</p>
+                          <button
+                            onClick={() => handleGenerate(false)}
+                            disabled={!prompt.trim()}
+                            className="bg-white text-orange-600 font-bold px-6 py-3 rounded-xl shadow-sm hover:shadow-md transition-all disabled:opacity-50 flex items-center gap-2"
                           >
-                            {v.style ? v.style.charAt(0).toUpperCase() + v.style.slice(1) : `Style ${i + 1}`}
+                            <Sparkles className="w-4 h-4" /> Generate Designs
                           </button>
-                        ))}
+                        </div>
                       </div>
                     </div>
-
-                    {/* Caption editor */}
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <p className="text-[11px] font-extrabold text-stone-400 uppercase tracking-widest">Caption</p>
-                          <span className="text-[10px] bg-teal-100 text-teal-700 font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
-                            <Sparkles className="w-2.5 h-2.5" /> AI
-                          </span>
-                        </div>
-                        <div className="flex gap-1 bg-stone-100 p-0.5 rounded-lg">
-                          {(['hinglish', 'english', 'hindi'] as const).map((tone) => (
-                            <button key={tone} onClick={() => setToneActive(tone)}
-                              className={`text-[10px] font-semibold px-2 py-1 rounded-md transition-colors capitalize ${
-                                toneActive === tone ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'
-                              }`}>
-                              {tone === 'hinglish' ? 'Hinglish' : tone === 'english' ? 'EN' : 'हिं'}
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                      <textarea
-                        value={caption}
-                        onChange={(e) => setCaption(e.target.value)}
-                        className="w-full h-32 p-3.5 border border-stone-200 rounded-xl text-sm text-stone-800 resize-none focus:outline-none focus:ring-2 focus:ring-orange-400 leading-relaxed"
-                        maxLength={charLimit}
-                      />
-                      <div className="flex justify-between mt-1">
-                        <span className="text-[11px] text-stone-400">{caption.length} / {charLimit}</span>
-                        <span className="text-[11px] text-stone-400 capitalize">{activePlatformPreview} limit</span>
-                      </div>
-                    </div>
-
-                    {/* Hashtags */}
-                    {currentVariant && (
-                      <div>
-                        <p className="text-[11px] font-extrabold text-stone-400 uppercase tracking-widest mb-2">Hashtags</p>
-                        <div className="flex gap-1.5 flex-wrap">
-                          {currentVariant.hashtags.map((h) => (
-                            <span key={h} className="bg-stone-100 text-stone-700 text-xs font-semibold px-2.5 py-1 rounded-full">{h}</span>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Design thumbnails */}
-                    <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <p className="text-[11px] font-extrabold text-stone-400 uppercase tracking-widest">Design</p>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-bold text-stone-800">Choose a design</p>
                         <button onClick={() => handleGenerate(true)}
-                          className="flex items-center gap-1 text-[11px] text-stone-500 hover:text-orange-600 font-semibold transition-colors">
-                          <RefreshCw className={`w-3 h-3 ${isGeneratingImages ? 'animate-spin' : ''}`} /> Regenerate
+                          className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-orange-600 font-semibold transition-colors bg-stone-100 px-3 py-1.5 rounded-lg">
+                          <RefreshCw className={`w-4 h-4 ${isGeneratingImages ? 'animate-spin' : ''}`} /> Regenerate
                         </button>
                       </div>
-                      <div className="grid grid-cols-3 gap-2">
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         {TEMPLATE_THEMES.map((theme, i) => {
                           const aiImg = aiImageUrls[i] ?? null;
                           const loading = imageLoadingStates[i] ?? false;
                           return (
                             <button key={i} onClick={() => handleVariantSelect(i)}
-                              className={`relative rounded-xl overflow-hidden border-2 transition-all ${
-                                selectedVariant === i ? 'border-orange-500 shadow-md shadow-orange-100' : 'border-transparent hover:border-stone-300'
+                              className={`relative rounded-2xl overflow-hidden border-2 transition-all group ${
+                                selectedVariant === i ? 'border-orange-500 shadow-lg shadow-orange-100 scale-[1.02]' : 'border-stone-200 hover:border-stone-300'
                               }`}
                             >
                               {aiImg ? (
                                 <img src={aiImg} alt={theme.label} className="w-full aspect-square object-cover" />
                               ) : loading ? (
-                                <div className={`aspect-square bg-gradient-to-br ${theme.gradient} flex items-center justify-center`}>
-                                  <Sparkles className="w-4 h-4 text-white/70 animate-pulse" />
+                                <div className={`aspect-square bg-gradient-to-br ${theme.gradient} flex flex-col items-center justify-center gap-2`}>
+                                  <Sparkles className="w-6 h-6 text-white/70 animate-pulse" />
+                                  <p className="text-white/50 text-[10px] font-bold uppercase tracking-wider">Creating…</p>
                                 </div>
                               ) : (
-                                <div className={`aspect-square bg-gradient-to-br ${theme.gradient} flex items-center justify-center`}>
-                                  <div className={`${theme.accent} rounded px-1.5 py-0.5`}>
-                                    <p className="text-white text-[8px] font-bold">{theme.label}</p>
+                                <div className={`aspect-square bg-gradient-to-br ${theme.gradient} flex items-center justify-center p-4`}>
+                                  <div className={`${theme.accent} rounded-lg px-3 py-1.5 shadow-sm`}>
+                                    <p className="text-white text-xs font-bold uppercase tracking-wider">{theme.label}</p>
                                   </div>
                                 </div>
                               )}
                               {selectedVariant === i && (
-                                <div className="absolute top-1 right-1 w-4 h-4 bg-orange-500 rounded-full flex items-center justify-center">
-                                  <Check className="w-2.5 h-2.5 text-white" />
+                                <div className="absolute top-3 right-3 w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center shadow-md">
+                                  <Check className="w-4 h-4 text-white" />
                                 </div>
                               )}
-                              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-2 py-1">
-                                <p className="text-white text-[9px] font-semibold">{theme.label}</p>
+                              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-3 pt-6">
+                                <p className="text-white text-xs font-bold">{theme.label}</p>
                               </div>
                             </button>
                           );
                         })}
                       </div>
-                    </div>
-
-                    {/* Publish actions */}
-                    <div className="space-y-2 pb-2">
-                      <button onClick={handlePublishNow} disabled={isPublishing || selectedPlatforms.length === 0}
-                        className="w-full flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white text-sm font-bold py-3.5 rounded-xl transition-colors shadow-sm shadow-orange-200">
-                        {isPublishing ? <><RefreshCw className="w-4 h-4 animate-spin" /> Publishing…</> : <><Send className="w-4 h-4" /> Post Everywhere</>}
-                      </button>
-                      <div className="flex gap-2">
-                        <button onClick={() => setShowScheduleModal(true)} disabled={selectedPlatforms.length === 0}
-                          className="flex-1 flex items-center justify-center gap-1.5 text-sm font-semibold text-stone-700 border border-stone-200 rounded-xl py-2.5 hover:bg-stone-50 disabled:opacity-50 transition-colors">
-                          <Calendar className="w-3.5 h-3.5" /> Schedule
-                        </button>
-                        <button className="flex-1 flex items-center justify-center gap-1.5 text-sm font-semibold text-stone-700 border border-stone-200 rounded-xl py-2.5 hover:bg-stone-50 transition-colors">
-                          <Download className="w-3.5 h-3.5" /> Download
-                        </button>
-                        <button className="flex items-center justify-center gap-1.5 px-3 text-sm font-semibold text-yellow-600 border border-yellow-200 bg-yellow-50 rounded-xl py-2.5 hover:bg-yellow-100 transition-colors">
-                          <Zap className="w-3.5 h-3.5" /> Boost
-                        </button>
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-            )}
-
+                    </>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
-          {/* Generate button — sticky at bottom */}
-          {!variants && (
-            <div className="p-4 border-t border-stone-100 bg-white shrink-0">
-              <button onClick={() => handleGenerate(false)} disabled={!prompt.trim() || isGenerating}
-                className="w-full flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-bold py-3.5 rounded-xl transition-colors shadow-sm shadow-orange-200">
-                {isGenerating ? <><RefreshCw className="w-4 h-4 animate-spin" /> Generating with AI…</> : <><Sparkles className="w-4 h-4" /> Generate with AI</>}
-              </button>
-              {!prompt.trim() && (
-                <p className="text-center text-[11px] text-stone-400 mt-2">Pick a post type and describe your post above</p>
+          {/* Generate button — shown when no variants yet and NOT in AI tab */}
+          {!variants && mediaTab !== 'ai' && (
+            <button
+              onClick={() => handleGenerate(false)}
+              disabled={!prompt.trim() || isGenerating}
+              className="w-full max-w-2xl flex items-center justify-center gap-2.5 bg-stone-900 hover:bg-black disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold py-4 rounded-2xl transition-colors shadow-lg shadow-stone-200 text-base"
+            >
+              {isGenerating
+                ? <><RefreshCw className="w-5 h-5 animate-spin" /> Generating content…</>
+                : <><PenLine className="w-5 h-5" /> Generate Post Content</>
+              }
+            </button>
+          )}
+
+          {/* ── SECTION 3: Caption — shown after generation ── */}
+          {(variants || isGenerating) && (
+            <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
+              <div className="px-6 py-5 border-b border-stone-100 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-lg font-bold text-stone-900">Caption</h2>
+                  <span className="flex items-center gap-1.5 text-xs bg-teal-100 text-teal-700 font-bold px-2.5 py-1 rounded-full">
+                    <Sparkles className="w-3 h-3" /> AI Generated
+                  </span>
+                </div>
+                {variants && (
+                  <div className="flex gap-1 bg-stone-100 p-1 rounded-xl">
+                    {(['hinglish', 'english', 'hindi'] as const).map((tone) => (
+                      <button key={tone} onClick={() => setToneActive(tone)}
+                        className={`text-xs font-semibold px-4 py-1.5 rounded-lg transition-colors ${
+                          toneActive === tone ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'
+                        }`}>
+                        {tone === 'hinglish' ? 'Hinglish' : tone === 'english' ? 'English' : 'हिंदी'}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {isGenerating ? (
+                <div className="px-6 py-6 space-y-4 max-w-3xl">
+                  <div className="flex gap-3">
+                    {[0,1,2].map(i => <div key={i} className="flex-1 h-10 bg-stone-100 rounded-xl animate-pulse" />)}
+                  </div>
+                  <div className="h-32 bg-stone-100 rounded-2xl animate-pulse" />
+                  <div className="flex gap-2">
+                    {[0,1,2,3].map(i => <div key={i} className="h-8 w-24 bg-stone-100 rounded-full animate-pulse" />)}
+                  </div>
+                </div>
+              ) : variants && (
+                <div className="px-6 py-6 space-y-5 max-w-3xl">
+                  {/* Style variant tabs */}
+                  <div className="flex gap-3">
+                    {variants.captions.map((v, i) => (
+                      <button key={i} onClick={() => handleVariantSelect(i)}
+                        className={`flex-1 py-3 px-4 rounded-xl text-sm font-bold border-2 transition-all ${
+                          selectedVariant === i
+                            ? 'bg-stone-900 text-white border-stone-900 shadow-md'
+                            : 'bg-white text-stone-600 border-stone-200 hover:border-stone-300'
+                        }`}>
+                        {v.style ? v.style.charAt(0).toUpperCase() + v.style.slice(1) : `Style ${i + 1}`}
+                      </button>
+                    ))}
+                  </div>
+
+                  {/* Editable caption */}
+                  <div className="relative">
+                    <textarea
+                      value={caption}
+                      onChange={(e) => setCaption(e.target.value)}
+                      className="w-full h-40 p-5 border-2 border-stone-200 rounded-2xl text-sm text-stone-800 resize-none focus:outline-none focus:border-orange-400 leading-relaxed transition-colors bg-stone-50/50 focus:bg-white"
+                      maxLength={charLimit}
+                    />
+                    <div className="absolute bottom-3 right-4 flex justify-end text-xs text-stone-400 font-medium bg-white/80 px-2 py-0.5 rounded backdrop-blur-sm">
+                      <span className={caption.length > charLimit * 0.9 ? 'text-orange-500' : ''}>
+                        {caption.length} / {charLimit}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Hashtags */}
+                  {currentVariant && currentVariant.hashtags.length > 0 && (
+                    <div>
+                      <p className="text-xs font-bold text-stone-500 uppercase tracking-widest mb-3">Suggested Hashtags</p>
+                      <div className="flex gap-2 flex-wrap">
+                        {currentVariant.hashtags.map((h) => (
+                          <span key={h} className="bg-orange-50 text-orange-700 text-sm font-semibold px-4 py-1.5 rounded-full border border-orange-200 shadow-sm">{h}</span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           )}
+
+          {/* bottom padding */}
+          <div className="h-8" />
         </div>
 
         {/* ════════════════════════════════════════════════════════════════════
-            RIGHT PANEL — live platform preview (fixed, non-scrolling)
+            RIGHT PANEL — mobile phone preview + publish actions (~20% width)
         ════════════════════════════════════════════════════════════════════ */}
-        <div className="flex-1 flex flex-col overflow-hidden bg-[#F5F0EA]">
+        <div className="w-72 shrink-0 border-l border-stone-200 bg-white flex flex-col items-center py-6 px-5 gap-6 overflow-y-auto">
 
-          {/* Platform tab switcher */}
-          <div className="flex items-center justify-between px-6 pt-5 pb-3 shrink-0">
-            <p className="text-sm font-bold text-stone-700">Live Preview</p>
-            <div className="flex gap-1 bg-white border border-stone-200 p-1 rounded-xl shadow-sm">
-              {(['google', 'facebook', 'instagram'] as const).map((p) => (
+          {/* Platform switcher */}
+          <div className="w-full">
+            <p className="text-xs font-extrabold text-stone-400 uppercase tracking-widest mb-3 text-center">Live Preview</p>
+            <div className="flex gap-1 bg-stone-100 p-1 rounded-xl">
+              {(['facebook', 'instagram', 'google'] as const).map((p) => (
                 <button key={p} onClick={() => setActivePlatformPreview(p)}
-                  className={`text-[11px] font-semibold px-3 py-1.5 rounded-lg transition-all ${
-                    activePlatformPreview === p ? 'bg-stone-900 text-white shadow-sm' : 'text-stone-500 hover:text-stone-700'
+                  className={`flex-1 py-1.5 rounded-lg text-[11px] uppercase tracking-wider font-bold transition-all ${
+                    activePlatformPreview === p ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-400 hover:text-stone-600'
                   }`}>
-                  {p === 'google' ? 'Google' : p === 'facebook' ? 'Facebook' : 'Instagram'}
+                  {p === 'google' ? 'Google' : p === 'facebook' ? 'FB' : 'IG'}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Mockup card — centered */}
-          <div className="flex-1 overflow-y-auto flex items-start justify-center px-6 pb-6">
-            <div className="w-full max-w-sm">
-              {/* Social post card */}
-              <div className="bg-white rounded-2xl border border-stone-200 shadow-lg overflow-hidden">
-
-                {/* Post header */}
-                <div className="flex items-center gap-2.5 px-4 py-3 border-b border-stone-100">
-                  <div className="w-9 h-9 bg-orange-600 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0">RM</div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-[13px] font-bold text-stone-900 leading-none">Rajesh Motors</p>
-                    <p className="text-[11px] text-stone-400 mt-0.5">
-                      Just now ·&nbsp;
-                      {activePlatformPreview === 'google' ? 'Google My Business' : activePlatformPreview === 'facebook' ? 'Facebook' : 'Instagram'}
-                    </p>
+          {/* Phone frame */}
+          <div className="relative w-full max-w-[200px] shrink-0">
+            {/* Phone shell */}
+            <div className="relative w-full bg-stone-900 rounded-[36px] p-1.5 shadow-2xl">
+              {/* Side buttons */}
+              <div className="absolute -left-1.5 top-20 w-1.5 h-10 bg-stone-700 rounded-l-full" />
+              <div className="absolute -left-1.5 top-36 w-1.5 h-8 bg-stone-700 rounded-l-full" />
+              <div className="absolute -right-1.5 top-24 w-1.5 h-12 bg-stone-700 rounded-r-full" />
+              
+              {/* Screen */}
+              <div className="bg-white rounded-[30px] overflow-hidden h-[400px] flex flex-col">
+                {/* Notch */}
+                <div className="flex justify-center pt-2 pb-1 bg-stone-900">
+                  <div className="w-20 h-5 bg-stone-900 rounded-b-2xl" />
+                </div>
+                {/* Status bar */}
+                <div className="bg-white px-4 py-1 flex items-center justify-between">
+                  <span className="text-[9px] font-bold text-stone-800">9:41</span>
+                  <div className="flex items-center gap-1">
+                    <div className="w-3 h-2 border-[1.5px] border-stone-800 rounded-sm p-[0.5px]">
+                      <div className="w-full h-full bg-stone-800 rounded-sm scale-x-75 origin-left" />
+                    </div>
                   </div>
-                  {activePlatformPreview === 'facebook' && (
-                    <button className="text-[11px] font-bold text-[#1877F2] bg-[#e7f0fd] px-3 py-1 rounded-full">+ Follow</button>
-                  )}
                 </div>
 
-                {/* Creative image */}
-                <div className="relative bg-stone-100">
-                  {aiImageUrls[selectedVariant] ? (
-                    <>
-                      <img src={aiImageUrls[selectedVariant]!} alt="Creative" className="w-full aspect-square object-cover" />
-                      <span className="absolute top-2 left-2 flex items-center gap-1 bg-black/60 text-white text-[9px] font-bold px-2 py-1 rounded-full">
-                        <Sparkles className="w-2.5 h-2.5" /> AI Generated
-                      </span>
-                    </>
-                  ) : imageLoadingStates[selectedVariant] ? (
-                    <div className={`aspect-square bg-gradient-to-br ${TEMPLATE_THEMES[Math.min(selectedVariant, 2)]?.gradient ?? 'from-stone-900 to-stone-800'} flex flex-col items-center justify-center gap-2`}>
-                      <Sparkles className="w-7 h-7 text-white/70 animate-pulse" />
-                      <p className="text-sm text-white/60 font-semibold">Generating creative…</p>
+                {/* Post content — miniaturised */}
+                <div className="bg-white flex-1 flex flex-col">
+                  {/* Mini post header */}
+                  <div className="flex items-center gap-2 px-3 py-2 border-b border-stone-100">
+                    <div className="w-7 h-7 bg-orange-600 rounded-full flex items-center justify-center shrink-0 shadow-inner">
+                      <span className="text-[8px] font-black text-white">RM</span>
                     </div>
-                  ) : isGenerating ? (
-                    <div className="aspect-square bg-stone-200 animate-pulse flex items-center justify-center">
-                      <Sparkles className="w-8 h-8 text-stone-400 animate-pulse" />
-                    </div>
-                  ) : prompt ? (
-                    <div className={`aspect-square bg-gradient-to-br ${TEMPLATE_THEMES[Math.min(selectedVariant, 2)]?.gradient ?? 'from-stone-900 to-stone-800'} flex flex-col items-center justify-center p-6`}>
-                      <p className="text-white/50 text-xs font-bold uppercase tracking-widest mb-3">
-                        {POST_TYPES.find((t) => t.id === selectedPostType)?.label ?? 'Your Post'}
+                    <div>
+                      <p className="text-[10px] font-black text-stone-900 leading-none">Rajesh Motors</p>
+                      <p className="text-[8px] font-medium text-stone-400 leading-none mt-1">
+                        {activePlatformPreview === 'facebook' ? 'Facebook' : activePlatformPreview === 'instagram' ? 'Instagram' : 'Google Update'}
                       </p>
-                      <p className="text-white text-sm font-bold text-center leading-snug max-w-[180px]">
-                        {prompt.slice(0, 60)}{prompt.length > 60 ? '…' : ''}
-                      </p>
-                      <div className="mt-4 bg-orange-600 rounded-full px-4 py-1.5">
-                        <p className="text-white text-xs font-bold">Rajesh Motors</p>
-                      </div>
                     </div>
-                  ) : (
-                    <div className="aspect-square bg-stone-100 flex flex-col items-center justify-center gap-3">
-                      <div className="w-14 h-14 rounded-2xl bg-stone-200 flex items-center justify-center">
-                        <Sparkles className="w-7 h-7 text-stone-400" />
-                      </div>
-                      <p className="text-sm text-stone-400 font-medium">Preview appears here</p>
-                    </div>
-                  )}
-                </div>
+                  </div>
 
-                {/* Caption area */}
-                <div className="px-4 py-3 border-t border-stone-100">
-                  {caption ? (
-                    <>
-                      <p className="text-[13px] text-stone-800 leading-relaxed line-clamp-3">{caption}</p>
-                      {currentVariant && currentVariant.hashtags.length > 0 && (
-                        <p className="mt-1.5 text-[12px] text-orange-600 font-medium line-clamp-1">
-                          {currentVariant.hashtags.slice(0, 4).join(' ')}
+                  {/* Mini creative image */}
+                  <div className="w-full aspect-square bg-stone-100 overflow-hidden relative">
+                    {aiImageUrls[selectedVariant] && mediaTab === 'ai' ? (
+                      <img src={aiImageUrls[selectedVariant]!} alt="Creative" className="w-full h-full object-cover" />
+                    ) : uploadedImageUrl && mediaTab === 'upload' ? (
+                      <img src={uploadedImageUrl} alt="Uploaded" className="w-full h-full object-cover" />
+                    ) : (isGeneratingImages || isGenerating) ? (
+                      <div className={`w-full h-full bg-gradient-to-br ${TEMPLATE_THEMES[Math.min(selectedVariant,2)]?.gradient ?? 'from-stone-900 to-stone-800'} flex items-center justify-center`}>
+                        <Sparkles className="w-6 h-6 text-white/60 animate-pulse" />
+                      </div>
+                    ) : prompt ? (
+                      <div className={`w-full h-full bg-gradient-to-br ${TEMPLATE_THEMES[Math.min(selectedVariant,2)]?.gradient ?? 'from-stone-900 to-stone-800'} flex flex-col items-center justify-center p-4`}>
+                        <p className="text-white text-[10px] font-bold text-center leading-snug">
+                          {prompt.slice(0, 50)}{prompt.length > 50 ? '…' : ''}
                         </p>
-                      )}
-                    </>
-                  ) : (
-                    <p className="text-[13px] text-stone-400 italic">Your caption will appear here…</p>
-                  )}
-                </div>
+                      </div>
+                    ) : (
+                      <div className="w-full h-full bg-stone-100 flex flex-col gap-2 items-center justify-center">
+                        <ImagePlus className="w-6 h-6 text-stone-300" />
+                      </div>
+                    )}
+                  </div>
 
-                {/* Platform action bar */}
-                <div className="px-4 py-2.5 border-t border-stone-100 bg-stone-50">
-                  {activePlatformPreview === 'instagram' ? (
-                    <div className="flex items-center gap-4">
-                      <span className="text-stone-500 text-lg">♡</span>
-                      <span className="text-stone-500 text-lg">💬</span>
-                      <span className="text-stone-500 text-lg">↗</span>
-                      <span className="ml-auto text-stone-500 text-lg">⊡</span>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-4">
-                      <span className="text-[12px] text-stone-500 font-medium">👍 Like</span>
-                      <span className="text-[12px] text-stone-500 font-medium">💬 Comment</span>
-                      <span className="text-[12px] text-stone-500 font-medium">↗ Share</span>
-                    </div>
-                  )}
+                  {/* Mini caption */}
+                  <div className="px-3 py-2 flex-1">
+                    {caption ? (
+                      <p className="text-[8px] text-stone-700 leading-relaxed line-clamp-3 font-medium">{caption}</p>
+                    ) : (
+                      <div className="space-y-1 mt-1">
+                        <div className="h-1.5 bg-stone-200 rounded-full w-full" />
+                        <div className="h-1.5 bg-stone-200 rounded-full w-4/5" />
+                        <div className="h-1.5 bg-stone-200 rounded-full w-3/5" />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Mini action bar */}
+                  <div className="flex items-center gap-3 px-3 py-2 border-t border-stone-100 mt-auto">
+                    {activePlatformPreview === 'instagram' ? (
+                      <><span className="text-[12px]">♡</span><span className="text-[12px]">💬</span><span className="text-[12px]">↗</span></>
+                    ) : (
+                      <><span className="text-[9px] font-semibold text-stone-500">👍 Like</span><span className="text-[9px] font-semibold text-stone-500">💬 Comment</span><span className="text-[9px] font-semibold text-stone-500">↗ Share</span></>
+                    )}
+                  </div>
+
+                  {/* Home bar */}
+                  <div className="flex justify-center py-2 pb-3 bg-stone-50">
+                    <div className="w-16 h-1 bg-stone-300 rounded-full" />
+                  </div>
                 </div>
               </div>
+            </div>
+          </div>
 
-              {/* Helper hint when no content yet */}
-              {!variants && !isGenerating && (
-                <div className="mt-5 flex flex-col gap-2 items-center text-xs text-stone-400">
-                  <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-full bg-orange-100 text-orange-600 font-bold flex items-center justify-center text-[10px]">1</span>
-                    Pick a post type
-                  </div>
-                  <div className="w-px h-3 bg-stone-200" />
-                  <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-full bg-orange-100 text-orange-600 font-bold flex items-center justify-center text-[10px]">2</span>
-                    Describe your offer
-                  </div>
-                  <div className="w-px h-3 bg-stone-200" />
-                  <div className="flex items-center gap-2">
-                    <span className="w-5 h-5 rounded-full bg-orange-100 text-orange-600 font-bold flex items-center justify-center text-[10px]">3</span>
-                    Generate with AI
-                  </div>
-                </div>
-              )}
+          {/* Publish to platforms */}
+          <div className="w-full space-y-3 mt-2">
+            <p className="text-xs font-extrabold text-stone-400 uppercase tracking-widest text-center">Publish to Platforms</p>
+            <div className="space-y-2">
+              {PLATFORMS.map(({ id, label, icon: Icon, color, dot }) => (
+                <button key={id} onClick={() => togglePlatform(id)}
+                  className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl border-2 transition-all ${
+                    selectedPlatforms.includes(id)
+                      ? 'border-stone-300 bg-stone-50 shadow-sm'
+                      : 'border-stone-100 opacity-60 hover:opacity-100 hover:border-stone-200'
+                  }`}
+                >
+                  <Icon className={`w-5 h-5 ${color} shrink-0`} />
+                  <span className="text-sm font-bold text-stone-700 flex-1 text-left">{id === 'gmb' ? 'Google' : label}</span>
+                  {selectedPlatforms.includes(id) && <div className={`w-2.5 h-2.5 rounded-full shadow-sm ${dot}`} />}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Divider */}
+          <div className="w-full border-t-2 border-stone-100 border-dashed" />
+
+          {/* Publish actions */}
+          <div className="w-full space-y-2.5">
+            <button onClick={handlePublishNow} disabled={isPublishing || selectedPlatforms.length === 0 || !variants}
+              className="w-full flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold py-3.5 rounded-xl transition-colors shadow-md shadow-orange-200">
+              {isPublishing ? <><RefreshCw className="w-4 h-4 animate-spin" /> Publishing…</> : <><Send className="w-4 h-4" /> Post Everywhere</>}
+            </button>
+            <button onClick={() => setShowScheduleModal(true)} disabled={selectedPlatforms.length === 0 || !variants}
+              className="w-full flex items-center justify-center gap-2 text-stone-700 text-sm font-bold border-2 border-stone-200 py-3 rounded-xl hover:bg-stone-50 hover:border-stone-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+              <Calendar className="w-4 h-4" /> Schedule Post
+            </button>
+            <div className="flex gap-2">
+              <button disabled={!variants} className="flex-1 flex items-center justify-center gap-2 text-stone-600 text-xs font-bold border-2 border-stone-200 py-2.5 rounded-xl hover:bg-stone-50 disabled:opacity-50 transition-colors">
+                <Download className="w-3.5 h-3.5" /> Save
+              </button>
+              <button disabled={!variants} className="flex-1 flex items-center justify-center gap-2 text-yellow-700 text-xs font-bold border-2 border-yellow-200 bg-yellow-50 py-2.5 rounded-xl hover:bg-yellow-100 disabled:opacity-50 transition-colors">
+                <Zap className="w-3.5 h-3.5" /> Boost
+              </button>
             </div>
           </div>
         </div>
