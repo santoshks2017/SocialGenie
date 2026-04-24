@@ -190,24 +190,22 @@ export default function AccountsPage() {
                       <ExternalLink className="w-3 h-3" /> Add another
                     </button>
                   </div>
+                ) : p.id === 'instagram' ? (
+                  <div className="text-center space-y-2">
+                    <p className="text-sm font-semibold text-stone-500">Auto-linked via Facebook</p>
+                    <p className="text-xs text-stone-400 flex items-center justify-center gap-1">
+                      <AlertTriangle className="w-3 h-3 text-amber-400" />
+                      Connect Facebook first to enable Instagram
+                    </p>
+                  </div>
                 ) : (
-                  {p.id === 'instagram' ? (
-                    <div className="text-center space-y-2">
-                      <p className="text-sm font-semibold text-stone-500">Auto-linked via Facebook</p>
-                      <p className="text-xs text-stone-400 flex items-center justify-center gap-1">
-                        <AlertTriangle className="w-3 h-3 text-amber-400" />
-                        Connect Facebook first to enable Instagram
-                      </p>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => handleConnect(p.authUrl)}
-                      disabled={!p.authUrl}
-                      className="w-full flex items-center justify-center gap-2 font-bold text-sm py-3 rounded-xl transition-colors shadow-sm bg-stone-900 hover:bg-black text-white"
-                    >
-                      <Globe className="w-4 h-4" /> Connect {p.label}
-                    </button>
-                  )}
+                  <button
+                    onClick={() => handleConnect(p.authUrl)}
+                    disabled={!p.authUrl}
+                    className="w-full flex items-center justify-center gap-2 font-bold text-sm py-3 rounded-xl transition-colors shadow-sm bg-stone-900 hover:bg-black text-white"
+                  >
+                    <Globe className="w-4 h-4" /> Connect {p.label}
+                  </button>
                 )}
               </div>
             </div>
