@@ -294,3 +294,12 @@ model InspirationHandle {
   @@index([dealer_id])
   @@unique([dealer_id, handle_url])
 }
+
+model DealerStyle {
+  id          String   @id @default(uuid())
+  dealerId    String
+  festivals   String[]
+  imageCount  Int
+  hasPhone    Boolean
+  createdAt   DateTime @default(now())
+}

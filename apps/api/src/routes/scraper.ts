@@ -12,6 +12,7 @@
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '../db/prisma.js';
 import { SEED_PAGES, scrapePublicPage, scrapeWithGraphAPI, extractPatterns } from '../services/socialScraper.js';
+import { scrapeUrl } from '@cardeko/scraper';
 
 function requireAdminSecret(request: { headers: Record<string, string | string[] | undefined> }, reply: { code: (n: number) => { send: (v: unknown) => unknown } }): boolean {
   const secret = process.env['ADMIN_SECRET'];
@@ -142,5 +143,30 @@ export default async function scraperRoutes(fastify: FastifyInstance) {
         last_scraped: h.last_scraped_at,
       })),
     };
+  });
+
+  // POST /v1/admin/scraper/scrape
+  // Scrapes any arbitrary URL and returns extracted text and images
+  fastify.post('/scrape', async (request, reply) => {
+    if (!requireAdminSecret(request as never, reply as never)) return;
+
+    const body = request.body as { url?: string } | undefined;
+    if (!body?.url || typeof body.url !== 'string') {
+      return reply.code(400).send({ error: 'Valid URL is required' });
+    }
+
+    try {
+      const urlObject = new URL(body.url);
+      if (!['http:', 'https:'].includes(urlObject.protocol)) {
+        return reply.code(400).send({ error: 'URL must be HTTP or HTTPS' });
+      }
+      
+      const result = await scrapeUrl(body.url);
+      
+      return { success: true, data: result };
+    } catch (err) {
+      fastify.log.error(`Scrape failed for ${body.url}: ${String(err)}`);
+      return reply.code(500).send({ error: 'Failed to scrape URL' });
+    }
   });
 }

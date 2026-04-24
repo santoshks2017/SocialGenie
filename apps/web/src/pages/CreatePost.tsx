@@ -94,12 +94,20 @@ export default function CreatePost() {
   const [uploadedVideoName, setUploadedVideoName] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [toneActive, setToneActive] = useState<'hinglish' | 'english' | 'hindi'>('hinglish');
-  const [mediaTab, setMediaTab] = useState<'upload' | 'ai'>('ai');
+  const [mediaTab, setMediaTab] = useState<'upload' | 'ai' | 'url'>('ai');
   const [inspirationImageId, setInspirationImageId] = useState<string | null>(null);
   const [inspirationImageUrl, setInspirationImageUrl] = useState<string | null>(null);
   const [aiImageUrls, setAiImageUrls] = useState<(string | null)[]>([null, null, null]);
   const [isGeneratingImages, setIsGeneratingImages] = useState(false);
   const [imageLoadingStates, setImageLoadingStates] = useState<boolean[]>([false, false, false]);
+  
+  // URL Generation states
+  const [sourceUrl, setSourceUrl] = useState('');
+  const [urlCar, setUrlCar] = useState('');
+  const [urlOffer, setUrlOffer] = useState('');
+  const [urlFestival, setUrlFestival] = useState('');
+  const [urlCity, setUrlCity] = useState('');
+  const [urlGeneratedImage, setUrlGeneratedImage] = useState<string | null>(null);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const aiInspirationInputRef = useRef<HTMLInputElement>(null);
@@ -256,6 +264,32 @@ export default function CreatePost() {
       addToast({ type: 'error', title: 'Generation failed', message: 'Could not generate captions. Check API logs.' });
     } finally {
       setIsGenerating(false);
+    }
+  };
+
+  const handleGenerateFromUrl = async () => {
+    if (!sourceUrl) return;
+    setIsGeneratingImages(true);
+    setUrlGeneratedImage(null);
+    try {
+      const res = await creativeService.generateFromUrl({
+        url: sourceUrl,
+        dealerId: 'test-dealer',
+        car: urlCar || 'Any Car',
+        offer: urlOffer || 'Special Offer',
+        festival: urlFestival || 'None',
+        city: urlCity || 'Any City'
+      });
+      if (res && res.data) {
+        setUrlGeneratedImage(res.data.image);
+        setCaption(res.data.content.caption);
+        setPrompt(`${res.data.content.headline} - ${res.data.content.cta}`);
+        addToast({ type: 'success', title: 'Success', message: 'Creative generated from URL successfully!' });
+      }
+    } catch (e) {
+      addToast({ type: 'error', title: 'Failed', message: 'Could not generate from URL' });
+    } finally {
+      setIsGeneratingImages(false);
     }
   };
 
@@ -698,6 +732,7 @@ export default function CreatePost() {
               {([
                 { id: 'ai',          icon: Wand2,     label: 'Generate with AI', sub: 'Let AI design it'    },
                 { id: 'upload',      icon: ImagePlus, label: 'Upload Creative',  sub: 'Your own image/video' },
+                { id: 'url',         icon: Globe,     label: 'Auto-Scrape URL',  sub: 'Generate from Link'   },
               ] as const).map(({ id, icon: Icon, label, sub }) => (
                 <button
                   key={id}
@@ -847,6 +882,48 @@ export default function CreatePost() {
                         })}
                       </div>
                     </>
+                  )}
+                </div>
+              )}
+
+              {/* URL Generation tab */}
+              {mediaTab === 'url' && (
+                <div className="space-y-4 max-w-2xl">
+                  <div className="flex gap-2">
+                    <input 
+                      type="url" 
+                      value={sourceUrl} 
+                      onChange={(e) => setSourceUrl(e.target.value)} 
+                      placeholder="Enter dealer website URL (e.g. https://example.com/offer)" 
+                      className="flex-1 px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-orange-400 text-sm"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <input type="text" value={urlCar} onChange={(e) => setUrlCar(e.target.value)} placeholder="Car Model (e.g. Creta)" className="px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-orange-400 text-sm" />
+                    <input type="text" value={urlOffer} onChange={(e) => setUrlOffer(e.target.value)} placeholder="Offer Details (e.g. ₹50K Off)" className="px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-orange-400 text-sm" />
+                    <input type="text" value={urlFestival} onChange={(e) => setUrlFestival(e.target.value)} placeholder="Festival (e.g. Diwali)" className="px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-orange-400 text-sm" />
+                    <input type="text" value={urlCity} onChange={(e) => setUrlCity(e.target.value)} placeholder="City (e.g. Delhi)" className="px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-orange-400 text-sm" />
+                  </div>
+                  <button 
+                    onClick={handleGenerateFromUrl} 
+                    disabled={!sourceUrl || isGeneratingImages}
+                    className="w-full bg-stone-900 hover:bg-black disabled:opacity-50 text-white font-bold py-4 rounded-xl transition-colors flex justify-center items-center gap-2 shadow-sm"
+                  >
+                    {isGeneratingImages ? <RefreshCw className="w-5 h-5 animate-spin" /> : <Globe className="w-5 h-5" />}
+                    {isGeneratingImages ? 'Scraping & Generating...' : 'Auto-Generate Post from Link'}
+                  </button>
+                  {urlGeneratedImage && (
+                    <div className="mt-6">
+                      <p className="text-sm font-bold text-stone-800 mb-2">Generated Result</p>
+                      <div className="border-2 border-orange-500 rounded-xl overflow-hidden shadow-lg inline-block relative group">
+                        <img src={urlGeneratedImage} alt="Generated from URL" className="w-64 h-64 object-cover" />
+                        <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                          <button onClick={() => setUrlGeneratedImage(null)} className="bg-white text-stone-900 px-3 py-1.5 rounded-lg text-xs font-bold shadow-sm">
+                            Clear Image
+                          </button>
+                        </div>
+                      </div>
+                    </div>
                   )}
                 </div>
               )}

@@ -101,6 +101,10 @@ export const creativeService = {
     }
   },
 
+  generateFromUrl: async (data: { url: string; dealerId: string; car: string; offer: string; festival: string; city: string }) => {
+    return api.post<{ success: boolean; data: { content: { caption: string; headline: string; cta: string; }; template: unknown; image: string; } }>('/generate-from-url', data);
+  },
+
   getTemplates: (category?: string) =>
     api.get<{ items: unknown[] }>('/creatives/templates', { category }),
 

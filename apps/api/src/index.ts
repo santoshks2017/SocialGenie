@@ -24,6 +24,10 @@ import usersRoutes from './routes/users.js';
 import uploadRoutes from './routes/upload.js';
 import inspirationRoutes from './routes/inspiration.js';
 import scraperRoutes from './routes/scraper.js';
+import analyzeRoutes from './routes/analyze.js';
+import renderRoutes from './routes/render.js';
+import generatePostRoutes from './routes/generatePost.js';
+import generateFromUrlRoutes from './routes/generateFromUrl.js';
 import { UPLOADS_ROOT } from './routes/upload.js';
 
 // Vercel sets this automatically in its environment
@@ -84,6 +88,10 @@ fastify.register(usersRoutes,       { prefix: '/v1/users' });
 fastify.register(uploadRoutes,      { prefix: '/v1/upload' });
 fastify.register(inspirationRoutes, { prefix: '/v1/dealer' });
 fastify.register(scraperRoutes,     { prefix: '/v1/admin/scraper' });
+fastify.register(analyzeRoutes,     { prefix: '/v1' });
+fastify.register(renderRoutes,      { prefix: '/v1' });
+fastify.register(generatePostRoutes,{ prefix: '/v1' });
+fastify.register(generateFromUrlRoutes, { prefix: '/v1' });
 
 fastify.get('/v1/health', async () => ({
   status: 'ok',
