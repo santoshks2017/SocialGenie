@@ -108,6 +108,7 @@ export default function CreatePost() {
   const [urlFestival, setUrlFestival] = useState('');
   const [urlCity, setUrlCity] = useState('');
   const [urlGeneratedImage, setUrlGeneratedImage] = useState<string | null>(null);
+  const [isPasting, setIsPasting] = useState(false);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const aiInspirationInputRef = useRef<HTMLInputElement>(null);
@@ -183,7 +184,12 @@ export default function CreatePost() {
         if (item.type.startsWith('image/')) {
           const file = item.getAsFile();
           if (file) {
+            setIsPasting(true);
+            const localUrl = URL.createObjectURL(file);
             if (mediaTab === 'ai') {
+              setInspirationImageUrl(localUrl);
+              setInspirationImageId('pasted');
+              // Also attempt server upload silently
               const res = await uploadFileAPI(file);
               if (res) {
                 setInspirationImageId(res.id);
@@ -191,8 +197,16 @@ export default function CreatePost() {
               }
             } else {
               setMediaTab('upload');
-              await handleImageUploadEvent(file);
+              setUploadedImageUrl(localUrl);
+              setUploadedImageId('pasted');
+              setUploadedVideoName(null);
+              const res = await uploadFileAPI(file);
+              if (res) {
+                setUploadedImageId(res.id);
+                setUploadedImageUrl(res.url);
+              }
             }
+            setTimeout(() => setIsPasting(false), 1500);
             break;
           }
         }
@@ -1032,132 +1046,144 @@ export default function CreatePost() {
         {/* ════════════════════════════════════════════════════════════════════
             RIGHT PANEL — mobile phone preview + publish actions (~20% width)
         ════════════════════════════════════════════════════════════════════ */}
-        <div className="w-72 shrink-0 border-l border-stone-200 bg-white flex flex-col items-center py-6 px-5 gap-6 overflow-y-auto">
+        {/* ════════════════════════════════════════════════════════════════════
+            RIGHT PANEL — sticky, wider phone preview + publish actions
+        ════════════════════════════════════════════════════════════════════ */}
+        <div className="w-96 shrink-0 border-l border-stone-200 bg-white overflow-y-auto">
+          <div className="sticky top-0 flex flex-col items-center py-6 px-5 gap-5">
 
-          {/* Platform switcher */}
+          {/* Paste indicator */}
+          {isPasting && (
+            <div className="w-full bg-green-50 border-2 border-green-400 rounded-xl px-4 py-2 flex items-center gap-2 animate-pulse">
+              <Check className="w-4 h-4 text-green-600" />
+              <span className="text-sm font-bold text-green-700">Image pasted!</span>
+            </div>
+          )}
+
+          {/* Platform switcher — horizontal with icons */}
           <div className="w-full">
-            <p className="text-xs font-extrabold text-stone-400 uppercase tracking-widest mb-3 text-center">Live Preview</p>
+            <p className="text-xs font-extrabold text-stone-400 uppercase tracking-widest mb-2 text-center">Live Preview</p>
             <div className="flex gap-1 bg-stone-100 p-1 rounded-xl">
               {(['facebook', 'instagram', 'google'] as const).map((p) => (
                 <button key={p} onClick={() => setActivePlatformPreview(p)}
-                  className={`flex-1 py-1.5 rounded-lg text-[11px] uppercase tracking-wider font-bold transition-all ${
+                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg transition-all ${
                     activePlatformPreview === p ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-400 hover:text-stone-600'
                   }`}>
-                  {p === 'google' ? 'Google' : p === 'facebook' ? 'FB' : 'IG'}
+                  {p === 'facebook' ? <FbIcon className="w-4 h-4" /> : p === 'instagram' ? <IgIcon className="w-4 h-4" /> : <Globe className="w-4 h-4" />}
                 </button>
               ))}
             </div>
           </div>
 
-          {/* Phone frame */}
-          <div className="relative w-full max-w-[200px] shrink-0">
-            {/* Phone shell */}
+          {/* Phone frame — 2x bigger */}
+          <div className="relative w-full max-w-[320px] shrink-0">
             <div className="relative w-full bg-stone-900 rounded-[36px] p-1.5 shadow-2xl">
               {/* Side buttons */}
-              <div className="absolute -left-1.5 top-20 w-1.5 h-10 bg-stone-700 rounded-l-full" />
-              <div className="absolute -left-1.5 top-36 w-1.5 h-8 bg-stone-700 rounded-l-full" />
-              <div className="absolute -right-1.5 top-24 w-1.5 h-12 bg-stone-700 rounded-r-full" />
+              <div className="absolute -left-1.5 top-24 w-1.5 h-12 bg-stone-700 rounded-l-full" />
+              <div className="absolute -left-1.5 top-44 w-1.5 h-10 bg-stone-700 rounded-l-full" />
+              <div className="absolute -right-1.5 top-28 w-1.5 h-14 bg-stone-700 rounded-r-full" />
               
               {/* Screen */}
-              <div className="bg-white rounded-[30px] overflow-hidden h-[400px] flex flex-col">
+              <div className="bg-white rounded-[30px] overflow-hidden h-[580px] flex flex-col">
                 {/* Notch */}
                 <div className="flex justify-center pt-2 pb-1 bg-stone-900">
-                  <div className="w-20 h-5 bg-stone-900 rounded-b-2xl" />
+                  <div className="w-24 h-6 bg-stone-900 rounded-b-2xl" />
                 </div>
                 {/* Status bar */}
-                <div className="bg-white px-4 py-1 flex items-center justify-between">
-                  <span className="text-[9px] font-bold text-stone-800">9:41</span>
+                <div className="bg-white px-5 py-1.5 flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-stone-800">9:41</span>
                   <div className="flex items-center gap-1">
-                    <div className="w-3 h-2 border-[1.5px] border-stone-800 rounded-sm p-[0.5px]">
+                    <div className="w-4 h-2.5 border-[1.5px] border-stone-800 rounded-sm p-[0.5px]">
                       <div className="w-full h-full bg-stone-800 rounded-sm scale-x-75 origin-left" />
                     </div>
                   </div>
                 </div>
 
-                {/* Post content — miniaturised */}
+                {/* Post content */}
                 <div className="bg-white flex-1 flex flex-col">
-                  {/* Mini post header */}
-                  <div className="flex items-center gap-2 px-3 py-2 border-b border-stone-100">
-                    <div className="w-7 h-7 bg-orange-600 rounded-full flex items-center justify-center shrink-0 shadow-inner">
-                      <span className="text-[8px] font-black text-white">RM</span>
+                  {/* Post header */}
+                  <div className="flex items-center gap-2.5 px-4 py-2.5 border-b border-stone-100">
+                    <div className="w-9 h-9 bg-orange-600 rounded-full flex items-center justify-center shrink-0 shadow-inner">
+                      <span className="text-[10px] font-black text-white">RM</span>
                     </div>
                     <div>
-                      <p className="text-[10px] font-black text-stone-900 leading-none">Rajesh Motors</p>
-                      <p className="text-[8px] font-medium text-stone-400 leading-none mt-1">
+                      <p className="text-[12px] font-black text-stone-900 leading-none">Rajesh Motors</p>
+                      <p className="text-[9px] font-medium text-stone-400 leading-none mt-1">
                         {activePlatformPreview === 'facebook' ? 'Facebook' : activePlatformPreview === 'instagram' ? 'Instagram' : 'Google Update'}
                       </p>
                     </div>
                   </div>
 
-                  {/* Mini creative image */}
+                  {/* Creative image */}
                   <div className="w-full aspect-square bg-stone-100 overflow-hidden relative">
-                    {aiImageUrls[selectedVariant] && mediaTab === 'ai' ? (
+                    {urlGeneratedImage && mediaTab === 'url' ? (
+                      <img src={urlGeneratedImage} alt="Generated" className="w-full h-full object-cover" />
+                    ) : aiImageUrls[selectedVariant] && mediaTab === 'ai' ? (
                       <img src={aiImageUrls[selectedVariant]!} alt="Creative" className="w-full h-full object-cover" />
                     ) : uploadedImageUrl && mediaTab === 'upload' ? (
                       <img src={uploadedImageUrl} alt="Uploaded" className="w-full h-full object-cover" />
                     ) : (isGeneratingImages || isGenerating) ? (
                       <div className={`w-full h-full bg-gradient-to-br ${TEMPLATE_THEMES[Math.min(selectedVariant,2)]?.gradient ?? 'from-stone-900 to-stone-800'} flex items-center justify-center`}>
-                        <Sparkles className="w-6 h-6 text-white/60 animate-pulse" />
+                        <Sparkles className="w-8 h-8 text-white/60 animate-pulse" />
                       </div>
                     ) : prompt ? (
-                      <div className={`w-full h-full bg-gradient-to-br ${TEMPLATE_THEMES[Math.min(selectedVariant,2)]?.gradient ?? 'from-stone-900 to-stone-800'} flex flex-col items-center justify-center p-4`}>
-                        <p className="text-white text-[10px] font-bold text-center leading-snug">
-                          {prompt.slice(0, 50)}{prompt.length > 50 ? '…' : ''}
+                      <div className={`w-full h-full bg-gradient-to-br ${TEMPLATE_THEMES[Math.min(selectedVariant,2)]?.gradient ?? 'from-stone-900 to-stone-800'} flex flex-col items-center justify-center p-6`}>
+                        <p className="text-white text-[12px] font-bold text-center leading-snug">
+                          {prompt.slice(0, 60)}{prompt.length > 60 ? '…' : ''}
                         </p>
                       </div>
                     ) : (
                       <div className="w-full h-full bg-stone-100 flex flex-col gap-2 items-center justify-center">
-                        <ImagePlus className="w-6 h-6 text-stone-300" />
+                        <ImagePlus className="w-8 h-8 text-stone-300" />
                       </div>
                     )}
                   </div>
 
-                  {/* Mini caption */}
-                  <div className="px-3 py-2 flex-1">
+                  {/* Caption */}
+                  <div className="px-4 py-3 flex-1">
                     {caption ? (
-                      <p className="text-[8px] text-stone-700 leading-relaxed line-clamp-3 font-medium">{caption}</p>
+                      <p className="text-[10px] text-stone-700 leading-relaxed line-clamp-4 font-medium">{caption}</p>
                     ) : (
-                      <div className="space-y-1 mt-1">
-                        <div className="h-1.5 bg-stone-200 rounded-full w-full" />
-                        <div className="h-1.5 bg-stone-200 rounded-full w-4/5" />
-                        <div className="h-1.5 bg-stone-200 rounded-full w-3/5" />
+                      <div className="space-y-1.5 mt-1">
+                        <div className="h-2 bg-stone-200 rounded-full w-full" />
+                        <div className="h-2 bg-stone-200 rounded-full w-4/5" />
+                        <div className="h-2 bg-stone-200 rounded-full w-3/5" />
                       </div>
                     )}
                   </div>
 
-                  {/* Mini action bar */}
-                  <div className="flex items-center gap-3 px-3 py-2 border-t border-stone-100 mt-auto">
+                  {/* Action bar */}
+                  <div className="flex items-center gap-4 px-4 py-2.5 border-t border-stone-100 mt-auto">
                     {activePlatformPreview === 'instagram' ? (
-                      <><span className="text-[12px]">♡</span><span className="text-[12px]">💬</span><span className="text-[12px]">↗</span></>
+                      <><span className="text-[14px]">♡</span><span className="text-[14px]">💬</span><span className="text-[14px]">↗</span></>
                     ) : (
-                      <><span className="text-[9px] font-semibold text-stone-500">👍 Like</span><span className="text-[9px] font-semibold text-stone-500">💬 Comment</span><span className="text-[9px] font-semibold text-stone-500">↗ Share</span></>
+                      <><span className="text-[10px] font-semibold text-stone-500">👍 Like</span><span className="text-[10px] font-semibold text-stone-500">💬 Comment</span><span className="text-[10px] font-semibold text-stone-500">↗ Share</span></>
                     )}
                   </div>
 
                   {/* Home bar */}
-                  <div className="flex justify-center py-2 pb-3 bg-stone-50">
-                    <div className="w-16 h-1 bg-stone-300 rounded-full" />
+                  <div className="flex justify-center py-2.5 pb-3 bg-stone-50">
+                    <div className="w-20 h-1 bg-stone-300 rounded-full" />
                   </div>
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Publish to platforms */}
-          <div className="w-full space-y-3 mt-2">
-            <p className="text-xs font-extrabold text-stone-400 uppercase tracking-widest text-center">Publish to Platforms</p>
-            <div className="space-y-2">
-              {PLATFORMS.map(({ id, label, icon: Icon, color, dot }) => (
+          {/* Publish to platforms — horizontal icon toggles */}
+          <div className="w-full space-y-2">
+            <p className="text-xs font-extrabold text-stone-400 uppercase tracking-widest text-center">Platforms</p>
+            <div className="flex gap-2">
+              {PLATFORMS.map(({ id, icon: Icon, color, dot }) => (
                 <button key={id} onClick={() => togglePlatform(id)}
-                  className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-xl border-2 transition-all ${
+                  className={`flex-1 flex flex-col items-center gap-1.5 py-3 rounded-xl border-2 transition-all ${
                     selectedPlatforms.includes(id)
                       ? 'border-stone-300 bg-stone-50 shadow-sm'
-                      : 'border-stone-100 opacity-60 hover:opacity-100 hover:border-stone-200'
+                      : 'border-stone-100 opacity-50 hover:opacity-100 hover:border-stone-200'
                   }`}
                 >
                   <Icon className={`w-5 h-5 ${color} shrink-0`} />
-                  <span className="text-sm font-bold text-stone-700 flex-1 text-left">{id === 'gmb' ? 'Google' : label}</span>
-                  {selectedPlatforms.includes(id) && <div className={`w-2.5 h-2.5 rounded-full shadow-sm ${dot}`} />}
+                  {selectedPlatforms.includes(id) && <div className={`w-2 h-2 rounded-full shadow-sm ${dot}`} />}
                 </button>
               ))}
             </div>
@@ -1184,6 +1210,7 @@ export default function CreatePost() {
                 <Zap className="w-3.5 h-3.5" /> Boost
               </button>
             </div>
+          </div>
           </div>
         </div>
       </div>

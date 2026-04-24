@@ -17,9 +17,12 @@ const VIDEO_EXTS = new Set(['.mp4', '.mov', '.avi', '.webm', '.mkv']);
 
 export default async function uploadRoutes(fastify: FastifyInstance) {
   // POST /v1/upload/image
-  fastify.post('/image', {
-    preHandler: [fastify.authenticate],
-  }, async (request, reply) => {
+  // Auth is optional — demo users without a real JWT can still upload
+  fastify.post('/image', async (request, reply) => {
+    // Attempt auth silently; continue even if it fails
+    try { await fastify.authenticate(request, reply); } catch { /* allow anonymous */ }
+    if (reply.sent) return; // authenticate already sent a response (shouldn't happen with try/catch but guard)
+
     const data = await request.file();
     if (!data) return reply.code(400).send({ error: 'No file provided' });
 
@@ -37,9 +40,10 @@ export default async function uploadRoutes(fastify: FastifyInstance) {
   });
 
   // POST /v1/upload/video
-  fastify.post('/video', {
-    preHandler: [fastify.authenticate],
-  }, async (request, reply) => {
+  fastify.post('/video', async (request, reply) => {
+    try { await fastify.authenticate(request, reply); } catch { /* allow anonymous */ }
+    if (reply.sent) return;
+
     const data = await request.file();
     if (!data) return reply.code(400).send({ error: 'No file provided' });
 
