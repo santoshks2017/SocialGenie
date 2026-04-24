@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom';
 import {
   Car, Plus, MessageSquare, Bell,
   Calendar, BarChart2, Package, Zap, Settings,
@@ -507,11 +507,16 @@ function AppLayout({ children, fullBleed }: { children: React.ReactNode; fullBle
 }
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { user, token } = useAuth();
-  const location = useLocation();
-  if (!user && !token) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+  const { user, token, isInitializing } = useAuth();
+  if (isInitializing) {
+    return (
+      <div className="min-h-screen bg-[#0d0f1a] flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
   }
+  // No login page — demo session is always auto-issued; render children regardless
+  if (!user && !token) return <>{children}</>;
   return <>{children}</>;
 }
 

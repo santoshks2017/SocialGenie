@@ -8,6 +8,7 @@ interface AuthContextType {
   user: UserInfo | null;
   token: string | null;
   isLoading: boolean;
+  isInitializing: boolean;
   login: (phone: string, otp: string) => Promise<UserInfo>;
   loginWithToken: (token: string, refresh: string, user: UserInfo) => void;
   logout: () => void;
@@ -23,6 +24,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try { return JSON.parse(stored) as UserInfo; } catch { return null; }
   });
   const [isLoading, setIsLoading] = useState(false);
+  // True while the initial demo-login attempt is in flight (prevents redirect loop on first render)
+  const [isInitializing, setIsInitializing] = useState(() => !localStorage.getItem('access_token'));
 
   const loginWithToken = useCallback((accessToken: string, refreshToken: string, userInfo: UserInfo) => {
     localStorage.setItem('access_token', accessToken);
@@ -63,7 +66,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // On first load with no real token (demo mode), try to get a real JWT from the API.
   // If the API is unreachable we continue in pure-mock mode — no error shown to user.
   useEffect(() => {
-    if (token) return; // already have a real session
+    if (token) { setIsInitializing(false); return; }
     authService.loginDemo()
       .then((res) => {
         const userInfo: UserInfo = {
@@ -81,7 +84,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setToken(res.token);
         setUser(userInfo);
       })
-      .catch(() => { /* API unreachable — stay in mock-demo mode */ });
+      .catch(() => { /* API unreachable — stay in mock-demo mode */ })
+      .finally(() => setIsInitializing(false));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -133,7 +137,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [token, user]);
 
   return (
-    <AuthContext.Provider value={{ user, token, isLoading, login, loginWithToken, logout }}>
+    <AuthContext.Provider value={{ user, token, isLoading, isInitializing, login, loginWithToken, logout }}>
       {children}
     </AuthContext.Provider>
   );
