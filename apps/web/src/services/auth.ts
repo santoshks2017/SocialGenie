@@ -24,24 +24,29 @@ export interface RegisterRequest {
   brands: string[];
 }
 
+interface DemoLoginResponse {
+  token: string;
+  refreshToken: string;
+  user: {
+    id: string;
+    name: string;
+    role: string;
+    dealer_id: string | null;
+    permissions: Record<string, boolean>;
+    onboarding_completed: boolean;
+    onboarding_step: number;
+  };
+}
+
 export const authService = {
   sendOtp: (phone: string) =>
     api.post<{ success: boolean; message: string }>('/auth/otp/send', { phone }),
 
   verifyOtp: (phone: string, otp: string) =>
-    api.post<{
-      token: string;
-      refreshToken: string;
-      user: {
-        id: string;
-        name: string;
-        role: string;
-        dealer_id: string | null;
-        permissions: Record<string, boolean>;
-        onboarding_completed?: boolean;
-        onboarding_step?: number;
-      };
-    }>('/auth/otp/verify', { phone, otp }),
+    api.post<DemoLoginResponse>('/auth/otp/verify', { phone, otp }),
+
+  loginDemo: () =>
+    api.post<DemoLoginResponse>('/auth/demo'),
 
   refreshToken: (refreshToken: string) =>
     api.post<{ token: string }>('/auth/refresh', { refreshToken }),

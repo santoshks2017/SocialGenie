@@ -1,4 +1,6 @@
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/v1';
+// VITE_API_URL must be set in Vercel / your deployment environment.
+// Example: https://socialgenie-api.onrender.com/v1
+const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '';
 
 export class ApiError extends Error {
   status: number;
@@ -74,15 +76,19 @@ async function request<T>(
 
     // Auto-refresh on 401 (once) then retry
     if (response.status === 401 && !isRetry) {
+      // Capture whether a real session existed BEFORE attempting refresh
+      const hadRealSession = !!(localStorage.getItem('access_token') || localStorage.getItem('refresh_token'));
       const newToken = await tryRefreshToken();
       if (newToken) {
         return request<T>(endpoint, options, true);
       }
-      // Refresh failed — clear session and signal logout
-      localStorage.removeItem('access_token');
-      localStorage.removeItem('refresh_token');
-      localStorage.removeItem('user_info');
-      window.dispatchEvent(new Event('auth:logout'));
+      // Only force-logout when a real session expired; demo users (no token) stay logged in
+      if (hadRealSession) {
+        localStorage.removeItem('access_token');
+        localStorage.removeItem('refresh_token');
+        localStorage.removeItem('user_info');
+        window.dispatchEvent(new Event('auth:logout'));
+      }
     }
 
     const data = await response.json();

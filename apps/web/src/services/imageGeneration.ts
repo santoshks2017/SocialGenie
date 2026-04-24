@@ -1,6 +1,6 @@
 /// <reference path="../types/puter.d.ts" />
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001/v1';
+const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '';
 
 /**
  * Builds a short headline from caption text (mirrors extractHeadline on the backend).
@@ -41,6 +41,23 @@ async function generateWithPuter(imagePrompt: string): Promise<string> {
     imgEl.onerror = () => reject(new Error('Puter image load failed'));
     setTimeout(() => reject(new Error('Puter image timeout')), 30_000);
   });
+}
+
+/**
+ * Pollinations.ai — completely free image generation, no API key.
+ * Returns a stable URL (CDN-cached by prompt hash).
+ * Automotive-tuned: adds negative prompt and quality modifiers.
+ */
+async function generateWithPollinations(imagePrompt: string): Promise<string> {
+  // Add automotive quality modifiers for better results
+  const enhancedPrompt = `${imagePrompt}, professional automotive photography, showroom quality, cinematic lighting, 8k, photorealistic`;
+  const url = `https://image.pollinations.ai/prompt/${encodeURIComponent(enhancedPrompt)}?width=1080&height=1080&model=flux&nologo=true&enhance=true`;
+
+  // Just verify the URL resolves — Pollinations returns the image directly
+  const res = await fetch(url, { signal: AbortSignal.timeout(45_000) });
+  if (!res.ok) throw new Error(`Pollinations failed (${res.status})`);
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
 }
 
 /**
@@ -99,12 +116,53 @@ async function generateBrandedWithBackend(
 }
 
 /**
+ * Generates an inline SVG data URL as a branded placeholder.
+ * Used when all other generation options fail so the UI always shows something.
+ */
+function generateSvgPlaceholder(captionText: string, variantIndex: number): string {
+  const headline = captionText.split(/[.!?\n]/)[0]?.trim().slice(0, 52) ?? 'Special Offer';
+  // Rotate accent colours per variant
+  const accents = ['#f97316', '#14b8a6', '#8b5cf6'];
+  const accent = accents[variantIndex % accents.length] ?? '#f97316';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1080" viewBox="0 0 1080 1080">
+    <defs>
+      <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+        <stop offset="0%" stop-color="#0a0c14"/>
+        <stop offset="60%" stop-color="#141824"/>
+        <stop offset="100%" stop-color="#1e1030"/>
+      </linearGradient>
+      <radialGradient id="glow" cx="70%" cy="35%" r="55%">
+        <stop offset="0%" stop-color="${accent}" stop-opacity="0.25"/>
+        <stop offset="100%" stop-color="#000" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+    <rect width="1080" height="1080" fill="url(#bg)"/>
+    <rect width="1080" height="1080" fill="url(#glow)"/>
+    <!-- Diagonal accent bar -->
+    <line x1="0" y1="1080" x2="1080" y2="0" stroke="${accent}" stroke-opacity="0.07" stroke-width="180"/>
+    <!-- Car icon placeholder -->
+    <text x="540" y="430" font-family="Arial,sans-serif" font-size="96" text-anchor="middle" fill="${accent}" opacity="0.7">🚗</text>
+    <!-- Headline -->
+    <text x="540" y="560" font-family="Arial,sans-serif" font-size="44" font-weight="bold" fill="white" text-anchor="middle" dominant-baseline="middle"
+      style="white-space:pre">${headline.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')}</text>
+    <!-- Sub-label -->
+    <text x="540" y="630" font-family="Arial,sans-serif" font-size="28" fill="rgba(255,255,255,0.45)" text-anchor="middle">Your Dealership · SocialGenie</text>
+    <!-- Bottom accent line -->
+    <rect x="390" y="680" width="300" height="4" rx="2" fill="${accent}" opacity="0.8"/>
+  </svg>`;
+  const blob = new Blob([svg], { type: 'image/svg+xml' });
+  return URL.createObjectURL(blob);
+}
+
+/**
  * Generates a fully branded creative for a given caption variant.
  *
  * Priority chain:
  *   1. Backend branded (Cloudflare SDXL + Sharp template) — best quality, fully branded
- *   2. Puter.js (client-side DALL-E, raw, no branding) — fast fallback
- *   3. Cloudflare raw (backend SDXL, base64, no branding) — last resort
+ *   2. Pollinations.ai (free, no API key, high quality) — primary free fallback
+ *   3. Puter.js (client-side DALL-E) — secondary free fallback
+ *   4. Cloudflare raw (backend SDXL, base64) — requires backend token
+ *   5. SVG placeholder — always works, no network required
  */
 export async function generateBrandedCreative(
   captionText: string,
@@ -118,19 +176,34 @@ export async function generateBrandedCreative(
   try {
     return await generateBrandedWithBackend(headline, templateIndex);
   } catch (e) {
-    console.warn('[ImageGen] Backend branded failed, trying Puter.js:', e);
+    console.warn('[ImageGen] Backend branded failed, trying Pollinations:', e);
   }
 
-  // 2. Try Puter.js (fast client-side, raw image)
   const imagePrompt = buildImagePrompt(captionText, userPrompt);
+
+  // 2. Pollinations.ai — free, no API key
+  try {
+    return await generateWithPollinations(imagePrompt);
+  } catch (e) {
+    console.warn('[ImageGen] Pollinations failed, trying Puter.js:', e);
+  }
+
+  // 3. Try Puter.js (client-side DALL-E)
   try {
     return await generateWithPuter(imagePrompt);
   } catch (e) {
     console.warn('[ImageGen] Puter.js failed, trying raw Cloudflare:', e);
   }
 
-  // 3. Raw Cloudflare via backend
-  return await generateWithCloudflare(imagePrompt);
+  // 4. Raw Cloudflare via backend
+  try {
+    return await generateWithCloudflare(imagePrompt);
+  } catch (e) {
+    console.warn('[ImageGen] Cloudflare failed, using SVG placeholder:', e);
+  }
+
+  // 5. SVG placeholder — always succeeds
+  return generateSvgPlaceholder(captionText, variantIndex);
 }
 
 /**

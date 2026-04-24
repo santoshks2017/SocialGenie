@@ -3,6 +3,7 @@ import { prisma } from "../db/prisma.js"
 import { resolvePermissions, ROLES } from "../lib/permissions.js"
 import type { Role, JwtUser } from "../lib/permissions.js"
 import { setOtp, getOtp, deleteOtp } from "../lib/otpStore.js"
+import { SEED_PAGES, scrapePublicPage, extractPatterns } from "../services/socialScraper.js"
 
 function generateOtp(): string {
   return Math.floor(100000 + Math.random() * 900000).toString()
@@ -250,66 +251,106 @@ export default async function authRoutes(fastify: FastifyInstance) {
     }
   })
 
-  // POST /v1/auth/demo — creates a real session for demo/exploration without OTP
-  fastify.post("/demo", async (_request, _reply) => {
-    const DEMO_PHONE = "9000000000";
+  // POST /v1/auth/demo — issues a JWT for a sandboxed demo dealer, no OTP required
+  fastify.post("/demo", async (_request, reply) => {
+    const demoPhone = "+0000000001"
+    try {
+      // Track whether this is the very first creation so we can seed patterns
+      const existing = await prisma.dealer.findUnique({ where: { phone: demoPhone } })
 
-    let dealer = await prisma.dealer.findFirst({ where: { phone: DEMO_PHONE } });
-    if (!dealer) {
-      dealer = await prisma.dealer.create({
-        data: {
-          phone: DEMO_PHONE,
-          name: "Demo Motors",
+      const demoDealer = await prisma.dealer.upsert({
+        where: { phone: demoPhone },
+        create: {
+          phone: demoPhone,
+          name: "Demo Dealership",
           city: "Mumbai",
-          state: "Maharashtra",
-          contact_phone: "+91 90000 00000",
-          whatsapp_number: "+91 90000 00000",
-          brands: ["Maruti Suzuki", "Hyundai", "Tata"],
+          brands: ["Maruti Suzuki", "Hyundai"],
+          contact_phone: "+91-9999999999",
+          whatsapp_number: "+91-9999999999",
           primary_color: "#f97316",
+          onboarding_step: 4,
+          onboarding_completed: true,
+        },
+        update: {},
+      })
+
+      // On first boot: seed inspiration patterns in the background (fire & forget)
+      if (!existing) {
+        const dealerId = demoDealer.id
+        void (async () => {
+          // Scrape a focused subset (3 pages) to keep startup fast
+          const seedSubset = SEED_PAGES.slice(0, 3)
+          for (const page of seedSubset) {
+            try {
+              const posts = await scrapePublicPage(page.url)
+              const patterns = extractPatterns(posts)
+              fastify.log.info(`[Demo seed] ${page.name}: ${posts.length} posts, types: ${patterns.detected_post_types.join(', ')}`)
+              if (posts.length > 0) {
+                await prisma.inspirationHandle.upsert({
+                  where: { dealer_id_handle_url: { dealer_id: dealerId, handle_url: page.url } },
+                  create: {
+                    dealer_id: dealerId,
+                    handle_url: page.url,
+                    platform: page.platform,
+                    handle_name: `${page.brand} — ${page.state}`,
+                    posts_cache: posts,
+                    last_scraped_at: new Date(),
+                  },
+                  update: { posts_cache: posts, last_scraped_at: new Date() },
+                })
+              }
+            } catch (e) {
+              fastify.log.warn(`[Demo seed] Failed to scrape ${page.name}: ${String(e)}`)
+            }
+          }
+        })()
+      }
+
+      const demoUser = await prisma.dealerUser.upsert({
+        where: { phone: demoPhone },
+        create: {
+          phone: demoPhone,
+          name: "Demo User",
+          role: ROLES.OWNER,
+          dealer_id: demoDealer.id,
+          is_active: true,
+        },
+        update: {},
+      })
+
+      const permissions = resolvePermissions(ROLES.OWNER)
+      const payload: JwtUser = {
+        dealer_user_id: demoUser.id,
+        dealer_id: demoDealer.id,
+        role: ROLES.OWNER as Role,
+        phone: demoPhone,
+        permissions,
+      }
+      const token = fastify.jwt.sign(payload, { expiresIn: "8h" })
+      const refreshToken = fastify.jwt.sign(payload, {
+        expiresIn: process.env["JWT_REFRESH_EXPIRES_IN"] ?? "30d",
+      })
+
+      return {
+        token,
+        refreshToken,
+        user: {
+          id: demoUser.id,
+          name: demoUser.name,
+          role: demoUser.role,
+          dealer_id: demoDealer.id,
+          permissions,
           onboarding_completed: true,
           onboarding_step: 4,
         },
-      });
+      }
+    } catch (err) {
+      fastify.log.error(err, "Demo login failed")
+      return reply.code(503).send({
+        error: { code: "DEMO_UNAVAILABLE", message: "Demo service temporarily unavailable" },
+      })
     }
-
-    let demoUser = await prisma.dealerUser.findFirst({ where: { dealer_id: dealer.id } });
-    if (!demoUser) {
-      demoUser = await prisma.dealerUser.create({
-        data: {
-          phone: DEMO_PHONE,
-          name: "Demo User",
-          role: ROLES.ADMIN,
-          dealer_id: dealer.id,
-          is_active: true,
-        },
-      });
-    }
-
-    const permissions = resolvePermissions(demoUser.role);
-    const payload: JwtUser = {
-      dealer_user_id: demoUser.id,
-      dealer_id: demoUser.dealer_id,
-      role: demoUser.role as Role,
-      phone: DEMO_PHONE,
-      permissions,
-    };
-    const token = fastify.jwt.sign(payload, { expiresIn: "30d" });
-    const refreshToken = fastify.jwt.sign(payload, { expiresIn: "90d" });
-
-    return {
-      token,
-      refreshToken,
-      user: {
-        id: demoUser.id,
-        name: demoUser.name,
-        role: demoUser.role,
-        dealer_id: demoUser.dealer_id,
-        permissions,
-        onboarding_completed: dealer.onboarding_completed,
-        onboarding_step: dealer.onboarding_step,
-      },
-    };
-  });
+  })
 
   // POST /v1/auth/refresh
   fastify.post("/refresh", async (request, reply) => {

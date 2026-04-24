@@ -60,6 +60,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
   }, []);
 
+  // On first load with no real token (demo mode), try to get a real JWT from the API.
+  // If the API is unreachable we continue in pure-mock mode — no error shown to user.
+  useEffect(() => {
+    if (token) return; // already have a real session
+    authService.loginDemo()
+      .then((res) => {
+        const userInfo: UserInfo = {
+          id: res.user.id,
+          name: res.user.name,
+          role: res.user.role as UserInfo['role'],
+          dealer_id: res.user.dealer_id,
+          permissions: res.user.permissions as UserInfo['permissions'],
+          onboarding_completed: res.user.onboarding_completed,
+          onboarding_step: res.user.onboarding_step,
+        };
+        localStorage.setItem('access_token', res.token);
+        localStorage.setItem('refresh_token', res.refreshToken);
+        localStorage.setItem('user_info', JSON.stringify(userInfo));
+        setToken(res.token);
+        setUser(userInfo);
+      })
+      .catch(() => { /* API unreachable — stay in mock-demo mode */ });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Validate/refresh token on mount
   useEffect(() => {
     if (!token) return;

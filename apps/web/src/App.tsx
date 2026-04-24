@@ -526,8 +526,8 @@ function AppRoutes() {
 
   return (
     <Routes>
-      {/* Public routes */}
-      <Route path="/login" element={<LoginPublicRoute><LoginPage onLogin={handleLogin} /></LoginPublicRoute>} />
+      {/* Public routes — /login always redirects to dashboard */}
+      <Route path="/login" element={<Navigate to="/" replace />} />
       <Route path="/auth/callback" element={<AuthCallbackPage onLogin={handleLogin} />} />
 
       {/* Protected routes */}

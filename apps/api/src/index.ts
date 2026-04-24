@@ -23,6 +23,7 @@ import leadsRoutes from './routes/leads.js';
 import usersRoutes from './routes/users.js';
 import uploadRoutes from './routes/upload.js';
 import inspirationRoutes from './routes/inspiration.js';
+import scraperRoutes from './routes/scraper.js';
 import { UPLOADS_ROOT } from './routes/upload.js';
 
 // Vercel sets this automatically in its environment
@@ -31,7 +32,8 @@ const IS_VERCEL = process.env['VERCEL'] === '1';
 const fastify = Fastify({ logger: true });
 
 const ALLOWED_ORIGINS = new Set([
-  process.env['FRONTEND_URL'] ?? 'http://localhost:5173',
+  process.env['FRONTEND_URL'] ?? 'https://social-genie-web.vercel.app',
+  'https://social-genie-web.vercel.app',
   'http://localhost:5173',
   'http://127.0.0.1:5173',
 ]);
@@ -81,6 +83,7 @@ fastify.register(leadsRoutes,     { prefix: '/v1/leads' });
 fastify.register(usersRoutes,       { prefix: '/v1/users' });
 fastify.register(uploadRoutes,      { prefix: '/v1/upload' });
 fastify.register(inspirationRoutes, { prefix: '/v1/dealer' });
+fastify.register(scraperRoutes,     { prefix: '/v1/admin/scraper' });
 
 fastify.get('/v1/health', async () => ({
   status: 'ok',

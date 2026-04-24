@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import type { DealerContext, InventoryContext, GeneratedCaptions, CaptionVariant } from './openai.js';
+import { buildEnrichedSystemPrompt } from '../data/indianAutoPatterns.js';
 
 export type { DealerContext, InventoryContext, GeneratedCaptions, CaptionVariant };
 
@@ -20,59 +21,39 @@ function getClient(): OpenAI {
 
 const GROQ_MODEL = process.env['GROQ_MODEL'] ?? 'llama-3.3-70b-versatile';
 
-const SYSTEM_PROMPT = `You are a social media marketing expert for Indian automobile dealerships.
-You write captions that drive footfall, enquiries, and leads.
-
-RULES:
-1. Never invent or approximate prices. If no price provided, omit pricing entirely.
-2. Never invent vehicle specifications. Only use provided data.
-3. Include a clear call-to-action: visit showroom, call now, WhatsApp us.
-4. Use the dealer's city name for local relevance.
-5. Keep tone professional but warm — trusted local business, not a meme page.
-6. Generate exactly 3 variants using DIFFERENT angles and opening lines:
-   - "punchy": Under 60 words, urgency/scarcity hook. Best for Instagram.
-   - "detailed": 100-150 words, lists 2-3 benefits + EMI/price if available. Best for Facebook.
-   - "emotional": 70-100 words, aspirational — connects car to family/lifestyle/dreams. Best for Instagram Feed.
-
-OUTPUT FORMAT (valid JSON only, no markdown fences):
-{
-  "variants": [
-    { "caption_text": "...", "hashtags": ["#tag1","#tag2"], "suggested_emoji": ["🚗"], "platform_notes": "Best for Instagram Stories", "style": "punchy" },
-    { "caption_text": "...", "hashtags": ["#tag1","#tag2"], "suggested_emoji": ["✨"], "platform_notes": "Best for Facebook", "style": "detailed" },
-    { "caption_text": "...", "hashtags": ["#tag1","#tag2"], "suggested_emoji": ["❤️"], "platform_notes": "Best for Instagram Feed", "style": "emotional" }
-  ]
-}`;
-
 export async function generateCaptions(
   prompt: string,
   dealer: DealerContext,
   inventory?: InventoryContext,
   inspirationPosts?: string[],
+  postType?: string,
 ): Promise<GeneratedCaptions> {
   const groq = getClient();
+
+  const systemPrompt = buildEnrichedSystemPrompt(dealer.city, dealer.brands ?? [], postType);
 
   const vehicleBlock = inventory
     ? `VEHICLE: ${inventory.make ?? ''} ${inventory.model ?? ''} ${inventory.variant ?? ''} | Price: ${inventory.price ? `₹${(inventory.price / 100000).toFixed(2)} Lakhs` : 'not provided — omit pricing'} | Stock: ${inventory.stock_count ?? 'available'}`
     : 'VEHICLE: Use prompt details only.';
 
   const inspirationBlock = inspirationPosts && inspirationPosts.length > 0
-    ? `\n\nINSPIRATION POSTS (from reference pages — draw from their tone, style, and Indian cultural context, but do NOT copy them):\n${inspirationPosts.slice(0, 5).map((p, i) => `${i + 1}. "${p}"`).join('\n')}`
+    ? `\n\nINSPIRATION POSTS (real posts from similar Indian auto dealers — match the energy and style, do NOT copy):\n${inspirationPosts.slice(0, 6).map((p, i) => `${i + 1}. "${p}"`).join('\n')}`
     : '';
 
-  const userMessage = `DEALER: ${dealer.name}, ${dealer.city} | Phone: ${dealer.phone} | WhatsApp: ${dealer.whatsapp}
+  const userMessage = `DEALER: ${dealer.name}, ${dealer.city} | Phone: ${dealer.phone} | WhatsApp: ${dealer.whatsapp} | Brands: ${(dealer.brands ?? []).join(', ')}
 ${vehicleBlock}
-PROMPT: "${prompt}"${inspirationBlock}
+POST REQUEST: "${prompt}"${inspirationBlock}
 
 Generate 3 caption variants as JSON.`;
 
   const response = await groq.chat.completions.create({
     model: GROQ_MODEL,
     messages: [
-      { role: 'system', content: SYSTEM_PROMPT },
+      { role: 'system', content: systemPrompt },
       { role: 'user', content: userMessage },
     ],
     temperature: 0.85,
-    max_tokens: 1500,
+    max_tokens: 1800,
     response_format: { type: 'json_object' },
   });
 

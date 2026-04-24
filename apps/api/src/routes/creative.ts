@@ -72,11 +72,12 @@ async function generateCaptionsAI(
   inventoryContext?: Parameters<typeof openaiGenerateCaptions>[2],
   includeHindi = false,
   inspirationPosts?: string[],
+  postType?: string,
 ): Promise<GeneratedCaptions> {
   // 1. Try Groq (primary)
   if (isGroqAvailable()) {
     try {
-      return await groqGenerateCaptions(prompt, dealerContext, inventoryContext, inspirationPosts)
+      return await groqGenerateCaptions(prompt, dealerContext, inventoryContext, inspirationPosts, postType)
     } catch (err) {
       console.error("Groq generation failed, falling back to OpenRouter:", err)
     }
@@ -90,6 +91,7 @@ async function generateCaptionsAI(
         dealerContext,
         inventoryContext,
         inspirationPosts,
+        postType,
       )
     } catch (err) {
       console.error("OpenRouter generation failed, falling back to mock:", err)
@@ -147,9 +149,11 @@ export default async function creativeRoutes(fastify: FastifyInstance) {
         force?: boolean // bypass caption cache
         includeHindi?: boolean
         language?: string
+        post_type?: string // offer | new_arrival | delivery | festival | testimonial | engagement | service | ev | finance
       }
       const { prompt, platforms, image_id, force } = body
       const includeHindi = body.includeHindi || body.language === "hi"
+      const postType = body.post_type
 
       if (!prompt?.trim()) {
         return reply
@@ -236,6 +240,7 @@ export default async function creativeRoutes(fastify: FastifyInstance) {
             inventoryContext,
             includeHindi,
             inspirationPosts.length > 0 ? inspirationPosts : undefined,
+            postType,
           )
           captionCache.set(cacheKey, {
             result: captions,

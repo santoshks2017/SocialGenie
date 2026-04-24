@@ -51,12 +51,55 @@ export interface Post {
   created_at: string;
 }
 
+function mockCaptions(prompt: string, platforms: string[]): AIGenerationResponse {
+  const slug = prompt.slice(0, 80).replace(/['"]/g, '');
+  return {
+    captions: [
+      {
+        caption_text: `⚡ LIMITED TIME OFFER!\n\n${slug}\n\nDon't miss out — visit our showroom TODAY. Stock is limited!\n📞 Call now!`,
+        hashtags: ['#CarDeal', '#SpecialOffer', '#AutoDealer', '#DreamCar'],
+        suggested_emoji: ['⚡', '🚗', '📞'],
+        platform_notes: 'Best for Instagram Stories/Reels',
+        style: 'punchy',
+      },
+      {
+        caption_text: `Here's why our customers choose us:\n\n✅ ${slug}\n✅ Easy finance & EMI options\n✅ Trusted dealership with expert support\n✅ Test drive at your convenience\n\nVisit our showroom or call us to know more!`,
+        hashtags: ['#CarBuying', '#TestDrive', '#AutoFinance', '#TrustedDealer'],
+        suggested_emoji: ['✅', '🚗', '💰'],
+        platform_notes: 'Best for Facebook',
+        style: 'detailed',
+      },
+      {
+        caption_text: `Some journeys change everything.\n\n${slug}.\n\nWe believe every family deserves the car of their dreams. Let us make yours happen. 💫`,
+        hashtags: ['#DreamCar', '#FamilyFirst', '#NewBeginnings'],
+        suggested_emoji: ['❤️', '🌟', '🚗'],
+        platform_notes: 'Best for Instagram Feed',
+        style: 'emotional',
+      },
+    ] as AIGenerationResponse['captions'],
+    hindi_captions: null,
+    creatives: [
+      { id: 'tpl_bold_banner',  template_name: 'Bold Banner',      thumbnail_url: null, platform_urls: { facebook: null, instagram: null, instagram_story: null, gmb: null } },
+      { id: 'tpl_minimal',      template_name: 'Minimal Showcase', thumbnail_url: null, platform_urls: { facebook: null, instagram: null, instagram_story: null, gmb: null } },
+      { id: 'tpl_offer_card',   template_name: 'Offer Card',       thumbnail_url: null, platform_urls: { facebook: null, instagram: null, instagram_story: null, gmb: null } },
+    ],
+    inventory_matched: null,
+    platforms_requested: platforms,
+  };
+}
+
 export const creativeService = {
   getPrompts: (category?: string) =>
     api.get<{ data: Prompt[] }>('/creatives/prompts', { category }),
 
-  generateCaptions: (prompt: string, platforms: string[], imageId?: string, force?: boolean) =>
-    api.post<AIGenerationResponse>('/creatives/generate', { prompt, platforms, image_id: imageId, force }),
+  generateCaptions: async (prompt: string, platforms: string[], imageId?: string, force?: boolean): Promise<AIGenerationResponse> => {
+    try {
+      return await api.post<AIGenerationResponse>('/creatives/generate', { prompt, platforms, image_id: imageId, force });
+    } catch {
+      // API unreachable or auth not yet ready — return client-side mock captions
+      return mockCaptions(prompt, platforms);
+    }
+  },
 
   getTemplates: (category?: string) =>
     api.get<{ items: unknown[] }>('/creatives/templates', { category }),
