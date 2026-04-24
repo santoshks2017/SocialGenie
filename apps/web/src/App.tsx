@@ -420,29 +420,89 @@ function ComingUpPanel({ festivals }: { festivals?: DashboardData['upcomingFesti
 }
 
 function ConnectedPanel() {
+  const [accounts, setAccounts] = useState<{id:string;platform:string;accountName:string;createdAt:string}[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const PLATFORM_META: Record<string, { label: string; color: string }> = {
+    facebook:  { label: 'Facebook',  color: '#1877F2' },
+    instagram: { label: 'Instagram', color: '#E1306C' },
+    google:    { label: 'Google',    color: '#4285F4' },
+  };
+
+  useEffect(() => {
+    api.get<{ success: boolean; accounts: typeof accounts }>('/platform-accounts')
+      .then((res) => setAccounts(res.accounts ?? []))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleDelete = async (id: string) => {
+    try {
+      await api.delete(`/platform-accounts/${id}`);
+      setAccounts((prev) => prev.filter((a) => a.id !== id));
+    } catch { /* ignore */ }
+  };
+
+  const navigate = useNavigate();
+
   return (
     <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
-      <h3 className="font-semibold text-slate-900 text-sm mb-3.5">Connected Accounts</h3>
-      <div className="space-y-3">
-        {[
-          { name: 'Google My Business', color: '#4285F4', status: 'Ready' },
-          { name: 'Facebook Page',       color: '#1877F2', status: 'Ready' },
-          { name: 'Instagram Business',  color: '#E1306C', status: 'Ready' },
-        ].map((p) => (
-          <div key={p.name} className="flex items-center justify-between">
-            <div className="flex items-center gap-2.5">
-              <div className="w-7 h-7 rounded-lg flex items-center justify-center" style={{ background: `${p.color}18` }}>
-                <div className="w-3 h-3 rounded-full" style={{ background: p.color }} />
-              </div>
-              <p className="text-xs font-medium text-slate-700">{p.name}</p>
-            </div>
-            <div className="flex items-center gap-1">
-              <div className="w-1.5 h-1.5 bg-green-500 rounded-full" />
-              <span className="text-[10px] text-green-600 font-semibold">{p.status}</span>
-            </div>
-          </div>
-        ))}
+      <div className="flex items-center justify-between mb-3.5">
+        <h3 className="font-semibold text-slate-900 text-sm">Connected Accounts</h3>
+        <button onClick={() => navigate('/accounts')} className="text-[10px] text-orange-500 font-bold hover:text-orange-600">
+          Manage →
+        </button>
       </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-4">
+          <RefreshCw className="w-4 h-4 text-slate-300 animate-spin" />
+        </div>
+      ) : accounts.length === 0 ? (
+        <div className="text-center py-4">
+          <p className="text-xs text-slate-400">No accounts connected</p>
+          <button onClick={() => navigate('/accounts')} className="text-xs text-orange-500 font-semibold mt-1 hover:text-orange-600">
+            + Connect
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-2.5">
+          {accounts.slice(0, 5).map((acc) => {
+            const meta = PLATFORM_META[acc.platform] ?? { label: acc.platform, color: '#888' };
+            const timeAgo = (() => {
+              const diff = Date.now() - new Date(acc.createdAt).getTime();
+              const days = Math.floor(diff / 86400000);
+              if (days > 0) return `${days}d ago`;
+              const hrs = Math.floor(diff / 3600000);
+              return hrs > 0 ? `${hrs}h ago` : 'Just now';
+            })();
+            return (
+              <div key={acc.id} className="flex items-center gap-2.5 group">
+                <div className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0" style={{ background: `${meta.color}18` }}>
+                  <div className="w-3 h-3 rounded-full" style={{ background: meta.color }} />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-slate-800 truncate">{acc.accountName}</p>
+                  <p className="text-[10px] text-slate-400">{meta.label} · {timeAgo}</p>
+                </div>
+                <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button className="p-1 text-slate-300 hover:text-slate-500 transition-colors" title="Refresh token">
+                    <RefreshCw className="w-3 h-3" />
+                  </button>
+                  <button onClick={() => handleDelete(acc.id)} className="p-1 text-slate-300 hover:text-red-500 transition-colors" title="Disconnect">
+                    <X className="w-3 h-3" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+          {accounts.length > 5 && (
+            <button onClick={() => navigate('/accounts')} className="text-[10px] text-slate-400 font-semibold hover:text-orange-500 w-full text-center pt-1">
+              +{accounts.length - 5} more
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
