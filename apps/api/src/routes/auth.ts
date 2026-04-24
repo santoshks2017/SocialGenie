@@ -4,6 +4,7 @@ import { resolvePermissions, ROLES } from "../lib/permissions.js"
 import type { Role, JwtUser } from "../lib/permissions.js"
 import { setOtp, getOtp, deleteOtp } from "../lib/otpStore.js"
 import { SEED_PAGES, scrapePublicPage, extractPatterns } from "../services/socialScraper.js"
+import { saveAccount } from "../services/platformConnections.js"
 
 function generateOtp(): string {
   return Math.floor(100000 + Math.random() * 900000).toString()
@@ -383,4 +384,213 @@ export default async function authRoutes(fastify: FastifyInstance) {
       })
     }
   })
+
+  // ─── Facebook OAuth ────────────────────────────────────────────────────────
+  
+  const FB_API_VERSION = 'v18.0';
+  const FB_SCOPES = ['pages_show_list', 'pages_read_engagement', 'instagram_basic', 'instagram_content_publish'].join(',');
+
+  fastify.get('/facebook', async (_request, reply) => {
+    const META_APP_ID = process.env['META_APP_ID'];
+    const META_REDIRECT_URI = process.env['META_REDIRECT_URI'];
+
+    if (!META_APP_ID || !META_REDIRECT_URI) {
+      fastify.log.error('[FB OAuth] Missing META_APP_ID or META_REDIRECT_URI');
+      return reply.code(500).send({ error: 'Facebook OAuth not configured on server' });
+    }
+
+    const authUrl = new URL(`https://www.facebook.com/${FB_API_VERSION}/dialog/oauth`);
+    authUrl.searchParams.set('client_id', META_APP_ID);
+    authUrl.searchParams.set('redirect_uri', META_REDIRECT_URI);
+    authUrl.searchParams.set('scope', FB_SCOPES);
+    authUrl.searchParams.set('response_type', 'code');
+
+    return reply.redirect(authUrl.toString());
+  });
+
+  fastify.get('/facebook/callback', async (request, reply) => {
+    const { code, error: fbError } = request.query as { code?: string; error?: string };
+    const FRONTEND_URL = process.env['FRONTEND_URL'] ?? 'https://social-genie-web.vercel.app';
+
+    if (fbError || !code) {
+      return reply.redirect(`${FRONTEND_URL}/accounts?error=${encodeURIComponent(fbError ?? 'no_code')}`);
+    }
+
+    const META_APP_ID = process.env['META_APP_ID'];
+    const META_APP_SECRET = process.env['META_APP_SECRET'];
+    const META_REDIRECT_URI = process.env['META_REDIRECT_URI'];
+
+    if (!META_APP_ID || !META_APP_SECRET || !META_REDIRECT_URI) {
+      return reply.redirect(`${FRONTEND_URL}/accounts?error=server_config`);
+    }
+
+    try {
+      // Exchange code
+      const tokenUrl = new URL(`https://graph.facebook.com/${FB_API_VERSION}/oauth/access_token`);
+      tokenUrl.searchParams.set('client_id', META_APP_ID);
+      tokenUrl.searchParams.set('client_secret', META_APP_SECRET);
+      tokenUrl.searchParams.set('redirect_uri', META_REDIRECT_URI);
+      tokenUrl.searchParams.set('code', code);
+
+      const tokenRes = await fetch(tokenUrl.toString());
+      const tokenData = await tokenRes.json() as any;
+      const userAccessToken = tokenData.access_token;
+
+      // Fetch pages
+      const pagesUrl = `https://graph.facebook.com/${FB_API_VERSION}/me/accounts?access_token=${userAccessToken}&fields=id,name,access_token`;
+      const pagesRes = await fetch(pagesUrl);
+      const pagesData = await pagesRes.json() as any;
+      const pages = pagesData.data ?? [];
+
+      let fbCount = 0;
+      let igCount = 0;
+
+      for (const page of pages) {
+        await saveAccount({
+          userId: 'test-dealer',
+          platform: 'facebook',
+          accountId: page.id,
+          accountName: page.name,
+          accessToken: page.access_token,
+        });
+        fbCount++;
+
+        // Check IG
+        const igUrl = `https://graph.facebook.com/${FB_API_VERSION}/${page.id}?fields=instagram_business_account&access_token=${page.access_token}`;
+        const igRes = await fetch(igUrl);
+        const igData = await igRes.json() as any;
+
+        if (igData.instagram_business_account?.id) {
+          const igId = igData.instagram_business_account.id;
+          const igDetailsRes = await fetch(`https://graph.facebook.com/${FB_API_VERSION}/${igId}?fields=id,username&access_token=${page.access_token}`);
+          const igDetails = await igDetailsRes.json() as any;
+
+          await saveAccount({
+            userId: 'test-dealer',
+            platform: 'instagram',
+            accountId: igDetails.id,
+            accountName: igDetails.username ?? `IG-${igDetails.id}`,
+            accessToken: page.access_token,
+          });
+          igCount++;
+        }
+      }
+
+      return reply.redirect(`${FRONTEND_URL}/accounts?success=true&fb=${fbCount}&ig=${igCount}`);
+    } catch (err) {
+      fastify.log.error(err, '[FB OAuth] Callback failed');
+      return reply.redirect(`${FRONTEND_URL}/accounts?error=token_exchange_failed`);
+    }
+  });
+
+  // ─── Google OAuth ──────────────────────────────────────────────────────────
+
+  const GOOGLE_SCOPES = [
+    'https://www.googleapis.com/auth/business.manage',
+    'https://www.googleapis.com/auth/userinfo.profile',
+    'https://www.googleapis.com/auth/userinfo.email',
+  ].join(' ');
+
+  fastify.get('/google', async (_request, reply) => {
+    const GOOGLE_CLIENT_ID = process.env['GOOGLE_CLIENT_ID'];
+    const GOOGLE_REDIRECT_URI = process.env['GOOGLE_REDIRECT_URI'];
+
+    if (!GOOGLE_CLIENT_ID || !GOOGLE_REDIRECT_URI) {
+      return reply.code(500).send({ error: 'Google OAuth not configured on server' });
+    }
+
+    const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+    authUrl.searchParams.set('client_id', GOOGLE_CLIENT_ID);
+    authUrl.searchParams.set('redirect_uri', GOOGLE_REDIRECT_URI);
+    authUrl.searchParams.set('scope', GOOGLE_SCOPES);
+    authUrl.searchParams.set('response_type', 'code');
+    authUrl.searchParams.set('access_type', 'offline');
+    authUrl.searchParams.set('prompt', 'consent');
+
+    return reply.redirect(authUrl.toString());
+  });
+
+  fastify.get('/google/callback', async (request, reply) => {
+    const { code, error: gError } = request.query as { code?: string; error?: string };
+    const FRONTEND_URL = process.env['FRONTEND_URL'] ?? 'https://social-genie-web.vercel.app';
+
+    if (gError || !code) {
+      return reply.redirect(`${FRONTEND_URL}/accounts?error=${encodeURIComponent(gError ?? 'no_code')}`);
+    }
+
+    const GOOGLE_CLIENT_ID = process.env['GOOGLE_CLIENT_ID'];
+    const GOOGLE_CLIENT_SECRET = process.env['GOOGLE_CLIENT_SECRET'];
+    const GOOGLE_REDIRECT_URI = process.env['GOOGLE_REDIRECT_URI'];
+
+    if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !GOOGLE_REDIRECT_URI) {
+      return reply.redirect(`${FRONTEND_URL}/accounts?error=server_config`);
+    }
+
+    try {
+      const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          code,
+          client_id: GOOGLE_CLIENT_ID,
+          client_secret: GOOGLE_CLIENT_SECRET,
+          redirect_uri: GOOGLE_REDIRECT_URI,
+          grant_type: 'authorization_code',
+        }),
+      });
+
+      const tokenData = await tokenRes.json() as any;
+      const accessToken = tokenData.access_token;
+      const refreshToken = tokenData.refresh_token;
+
+      // Fetch accounts
+      const accountsRes = await fetch('https://mybusinessaccountmanagement.googleapis.com/v1/accounts', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      const accountsData = await accountsRes.json() as any;
+      const accounts = accountsData.accounts ?? [];
+
+      let savedCount = 0;
+      for (const account of accounts) {
+        const accountId = account.name.replace('accounts/', '');
+        
+        // Fetch locations
+        const locationsRes = await fetch(`https://mybusinessbusinessinformation.googleapis.com/v1/${account.name}/locations?readMask=name,title`, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        const locData = await locationsRes.json() as any;
+        const locations = locData.locations ?? [];
+
+        for (const loc of locations) {
+          const locId = loc.name.replace('locations/', '');
+          await saveAccount({
+            userId: 'test-dealer',
+            platform: 'google',
+            accountId: `${accountId}/${locId}`,
+            accountName: loc.title || account.accountName,
+            accessToken,
+            refreshToken,
+          });
+          savedCount++;
+        }
+
+        if (locations.length === 0) {
+          await saveAccount({
+            userId: 'test-dealer',
+            platform: 'google',
+            accountId,
+            accountName: account.accountName || `Google Business ${accountId}`,
+            accessToken,
+            refreshToken,
+          });
+          savedCount++;
+        }
+      }
+
+      return reply.redirect(`${FRONTEND_URL}/accounts?success=true&google=${savedCount}`);
+    } catch (err) {
+      fastify.log.error(err, '[Google OAuth] Callback failed');
+      return reply.redirect(`${FRONTEND_URL}/accounts?error=token_exchange_failed`);
+    }
+  });
 }
