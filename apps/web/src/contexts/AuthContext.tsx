@@ -15,8 +15,30 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+function makeOfflineDemoSession(): { token: string; user: UserInfo } {
+  const user: UserInfo = {
+    id: 'demo-offline', name: 'Demo User', role: 'admin',
+    dealer_id: 'demo-dealer', permissions: {} as UserInfo['permissions'],
+    onboarding_completed: true, onboarding_step: 4,
+  };
+  const payload = btoa(JSON.stringify({
+    dealer_user_id: 'demo-offline', dealer_id: 'demo-dealer',
+    role: 'admin', phone: 'demo', permissions: {},
+    exp: Math.floor(Date.now() / 1000) + 86400 * 30,
+  }));
+  const token = `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.${payload}.OFFLINE_DEMO`;
+  return { token, user };
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [token, setToken] = useState<string | null>(() => localStorage.getItem('access_token'));
+  const [token, setToken] = useState<string | null>(() => {
+    const stored = localStorage.getItem('access_token');
+    if (stored) return stored;
+    const { token: demoToken, user: demoUser } = makeOfflineDemoSession();
+    localStorage.setItem('access_token', demoToken);
+    localStorage.setItem('user_info', JSON.stringify(demoUser));
+    return demoToken;
+  });
   const [user, setUser] = useState<UserInfo | null>(() => {
     const stored = localStorage.getItem('user_info');
     if (!stored) return null;
@@ -62,7 +84,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Validate/refresh token on mount
   useEffect(() => {
-    if (!token) return;
+    if (!token || token.endsWith('.OFFLINE_DEMO')) return;
     try {
       const [, payload] = token.split('.');
       const decoded = JSON.parse(atob(payload));
@@ -90,7 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   // Fetch user info from API if token exists but user is missing from localStorage
   useEffect(() => {
-    if (!token || user) return;
+    if (!token || user || token.endsWith('.OFFLINE_DEMO')) return;
     api.get<{ user: { id: string; name: string; role: string; dealerId: string | null; permissions: Record<string, boolean> } }>('/users/me')
       .then((res) => {
         const u = res.user;
