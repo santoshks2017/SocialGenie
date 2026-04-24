@@ -46,7 +46,11 @@ await fastify.register(cors, {
   origin: (origin, cb) => {
     if (!origin) return cb(null, true);
     // Allow exact matches + any *.vercel.app subdomain (covers preview + production deployments)
-    if (ALLOWED_ORIGINS.has(origin) || /^https:\/\/[a-z0-9-]+\.vercel\.app$/.test(origin)) {
+    if (
+      ALLOWED_ORIGINS.has(origin)
+      || /^https:\/\/[a-z0-9-]+\.vercel\.app$/.test(origin)
+      || /^http:\/\/(localhost|127\.0\.0\.1):\d+$/.test(origin)
+    ) {
       return cb(null, true);
     }
     cb(new Error(`Origin ${origin} not allowed by CORS`), false);

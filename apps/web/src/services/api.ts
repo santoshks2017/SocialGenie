@@ -1,6 +1,8 @@
 // VITE_API_URL must be set in Vercel / your deployment environment.
 // Example: https://socialgenie-api.onrender.com/v1
-const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined) ?? '';
+// In local Vite dev, fall back to the API workspace's default Fastify port.
+const API_BASE_URL = (import.meta.env.VITE_API_URL as string | undefined)
+  ?? (import.meta.env.DEV ? 'http://127.0.0.1:3001/v1' : '');
 
 export class ApiError extends Error {
   status: number;
@@ -62,8 +64,10 @@ async function request<T>(
 
   const token = localStorage.getItem('access_token');
 
+  const hasJsonBody = fetchOptions.body !== undefined && !(fetchOptions.body instanceof FormData);
+
   const headers: HeadersInit = {
-    ...(!(fetchOptions.body instanceof FormData) && { 'Content-Type': 'application/json' }),
+    ...(hasJsonBody && { 'Content-Type': 'application/json' }),
     ...(token && { Authorization: `Bearer ${token}` }),
     ...fetchOptions.headers,
   };
