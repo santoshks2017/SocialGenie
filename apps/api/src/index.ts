@@ -29,7 +29,6 @@ import renderRoutes from './routes/render.js';
 import generatePostRoutes from './routes/generatePost.js';
 import generateFromUrlRoutes from './routes/generateFromUrl.js';
 import platformAccountRoutes from './routes/platformAccounts.js';
-import platformAccountRoutes from './routes/platformAccounts.js';
 import { UPLOADS_ROOT } from './routes/upload.js';
 
 // Vercel sets this automatically in its environment
@@ -94,7 +93,6 @@ fastify.register(analyzeRoutes,     { prefix: '/v1' });
 fastify.register(renderRoutes,      { prefix: '/v1' });
 fastify.register(generatePostRoutes,{ prefix: '/v1' });
 fastify.register(generateFromUrlRoutes, { prefix: '/v1' });
-fastify.register(platformAccountRoutes, { prefix: '/v1/platform-accounts' });
 fastify.register(platformAccountRoutes, { prefix: '/v1/platform-accounts' });
 
 fastify.get('/v1/health', async () => ({
