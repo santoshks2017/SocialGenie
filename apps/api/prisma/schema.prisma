@@ -303,3 +303,18 @@ model DealerStyle {
   hasPhone    Boolean
   createdAt   DateTime @default(now())
 }
+
+model PlatformAccount {
+  id           String    @id @default(uuid())
+  userId       String
+  platform     String    // "facebook" | "instagram" | "google"
+  accountId    String
+  accountName  String
+  accessToken  String
+  refreshToken String?
+  tokenExpiry  DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@unique([userId, platform, accountId])
+  @@index([userId])
+}

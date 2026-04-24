@@ -1,7 +1,7 @@
 import { BrowserRouter as Router, Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom';
 import {
   Car, Plus, MessageSquare, Bell,
-  Calendar, BarChart2, Package, Zap, Settings,
+  Calendar, BarChart2, Package, Zap, Settings, Link2,
   ChevronRight, Send, RefreshCw, Star, Check, Sparkles,
   LayoutDashboard, Video, LogOut, Menu, X,
 } from 'lucide-react';
@@ -19,6 +19,7 @@ import AnalyticsPage from './pages/Analytics';
 import SettingsPage from './pages/SettingsPage';
 import AuthCallbackPage from './pages/AuthCallbackPage';
 import ConnectProfilesPage from './pages/ConnectProfilesPage';
+import AccountsPage from './pages/AccountsPage';
 import type { UserInfo } from './lib/permissions';
 
 // ─── Nav config ───────────────────────────────────────────────────────────────
@@ -29,6 +30,7 @@ const NAV_ITEMS = [
   { to: '/inbox',     icon: MessageSquare,   label: 'Inbox',      badge: 4   },
   { to: '/inventory', icon: Package,         label: 'Inventory'              },
   { to: '/boost',     icon: Zap,             label: 'Boost'                  },
+  { to: '/accounts',  icon: Link2,           label: 'Accounts'               },
   { to: '/create',    icon: Video,           label: 'AI Video',   isNew: true },
 ];
 
@@ -543,6 +545,7 @@ function AppRoutes() {
       <Route path="/inventory" element={<RequireAuth><AppLayout><InventoryPage /></AppLayout></RequireAuth>} />
       <Route path="/analytics" element={<RequireAuth><AppLayout><AnalyticsPage /></AppLayout></RequireAuth>} />
       <Route path="/boost" element={<RequireAuth><AppLayout><BoostPage /></AppLayout></RequireAuth>} />
+      <Route path="/accounts" element={<RequireAuth><AppLayout><AccountsPage /></AppLayout></RequireAuth>} />
       <Route path="/settings" element={<RequireAuth><AppLayout><SettingsPage /></AppLayout></RequireAuth>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
