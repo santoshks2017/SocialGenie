@@ -113,13 +113,16 @@ export const creativeService = {
 
   uploadImage: (file: File) => {
     const form = new FormData();
-    form.append('file', file);
+    // Clipboard files often have empty or generic names; ensure we provide one
+    const filename = file.name || `pasted-image-${Date.now()}.png`;
+    form.append('file', file, filename);
     return api.upload<{ id: string; url: string }>('/upload/image', form);
   },
 
   uploadVideo: (file: File) => {
     const form = new FormData();
-    form.append('file', file);
+    const filename = file.name || `pasted-video-${Date.now()}.mp4`;
+    form.append('file', file, filename);
     return api.upload<{ id: string; url: string }>('/upload/video', form);
   },
 };

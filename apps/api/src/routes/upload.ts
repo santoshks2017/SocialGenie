@@ -26,7 +26,15 @@ export default async function uploadRoutes(fastify: FastifyInstance) {
     const data = await request.file();
     if (!data) return reply.code(400).send({ error: 'No file provided' });
 
-    const ext = path.extname(data.filename).toLowerCase() || '.jpg';
+    let ext = path.extname(data.filename).toLowerCase();
+    if (!ext) {
+      // Fallback to mimetype if filename has no extension
+      if (data.mimetype === 'image/png') ext = '.png';
+      else if (data.mimetype === 'image/webp') ext = '.webp';
+      else if (data.mimetype === 'image/heic') ext = '.heic';
+      else ext = '.jpg';
+    }
+
     if (!IMAGE_EXTS.has(ext)) {
       return reply.code(400).send({ error: `Unsupported image type. Allowed: ${[...IMAGE_EXTS].join(', ')}` });
     }
@@ -47,7 +55,13 @@ export default async function uploadRoutes(fastify: FastifyInstance) {
     const data = await request.file();
     if (!data) return reply.code(400).send({ error: 'No file provided' });
 
-    const ext = path.extname(data.filename).toLowerCase() || '.mp4';
+    let ext = path.extname(data.filename).toLowerCase();
+    if (!ext) {
+      if (data.mimetype === 'video/quicktime') ext = '.mov';
+      else if (data.mimetype === 'video/webm') ext = '.webm';
+      else ext = '.mp4';
+    }
+
     if (!VIDEO_EXTS.has(ext)) {
       return reply.code(400).send({ error: `Unsupported video type. Allowed: ${[...VIDEO_EXTS].join(', ')}` });
     }
