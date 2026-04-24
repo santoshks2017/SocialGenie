@@ -55,7 +55,26 @@ export default function LoginPage({ onLogin }: LoginPageProps) {
       };
       onLogin(res.token, res.refreshToken, userInfo);
     } catch {
-      setError('Demo login failed. Please check your internet connection.');
+      // API unreachable — create a local demo session so the UI is still accessible
+      const demoUser: UserInfo = {
+        id: 'demo-offline',
+        name: 'Demo User',
+        role: 'admin' as UserInfo['role'],
+        dealer_id: 'demo-dealer',
+        permissions: {} as UserInfo['permissions'],
+        onboarding_completed: true,
+        onboarding_step: 4,
+      };
+      const jwtPayload = btoa(JSON.stringify({
+        dealer_user_id: 'demo-offline',
+        dealer_id: 'demo-dealer',
+        role: 'admin',
+        phone: 'demo',
+        permissions: {},
+        exp: Math.floor(Date.now() / 1000) + 86400 * 30,
+      }));
+      const offlineToken = `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.${jwtPayload}.OFFLINE_DEMO`;
+      onLogin(offlineToken, offlineToken, demoUser);
     } finally {
       setLoading(null);
     }
