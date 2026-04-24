@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
-import { Globe, Trash2, RefreshCw, ExternalLink } from 'lucide-react';
+import { Globe, Trash2, RefreshCw, ExternalLink, AlertTriangle } from 'lucide-react';
 import api from '../services/api';
+import { useToast } from '../components/ui/Toast';
 
 const API_BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? '';
 
@@ -59,8 +60,38 @@ export default function AccountsPage() {
   const [accounts, setAccounts] = useState<ConnectedAccount[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const { addToast } = useToast();
+
+  // Check for OAuth result in URL params on mount
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const success = params.get('success');
+    const error = params.get('error');
+    if (success === 'true') {
+      const fbCount = params.get('fb');
+      const igCount = params.get('ig');
+      const googleCount = params.get('google');
+      const parts: string[] = [];
+      if (fbCount && fbCount !== '0') parts.push(`${fbCount} Facebook page(s)`);
+      if (igCount && igCount !== '0') parts.push(`${igCount} Instagram account(s)`);
+      if (googleCount && googleCount !== '0') parts.push(`${googleCount} Google Business location(s)`);
+      addToast({ type: 'success', title: 'Connected!', message: parts.length ? `Linked: ${parts.join(', ')}` : 'Account connected successfully.' });
+      // Clean URL without reload
+      window.history.replaceState({}, '', '/accounts');
+    } else if (error) {
+      const messages: Record<string, string> = {
+        server_config: 'OAuth is not configured on the server. Contact support.',
+        token_exchange_failed: 'Token exchange failed. Please try again.',
+        no_code: 'Authorization was cancelled.',
+      };
+      addToast({ type: 'error', title: 'Connection failed', message: messages[error] ?? `OAuth error: ${error}` });
+      window.history.replaceState({}, '', '/accounts');
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const fetchAccounts = useCallback(async () => {
+    setLoading(true);
     try {
       const res = await api.get<{ success: boolean; accounts: ConnectedAccount[] }>('/platform-accounts');
       setAccounts(res.accounts ?? []);
@@ -73,16 +104,18 @@ export default function AccountsPage() {
 
   useEffect(() => { fetchAccounts(); }, [fetchAccounts]);
 
-  // Listen for OAuth popup/redirect return
+  // Refetch when browser tab regains focus (after OAuth redirect back)
   useEffect(() => {
-    const handler = () => { fetchAccounts(); };
-    window.addEventListener('focus', handler);
-    return () => window.removeEventListener('focus', handler);
+    window.addEventListener('focus', fetchAccounts);
+    return () => window.removeEventListener('focus', fetchAccounts);
   }, [fetchAccounts]);
 
   const handleConnect = (authUrl: string | null) => {
     if (!authUrl) return;
-    window.location.href = authUrl;
+    // Append access_token so the backend can associate the OAuth result with this dealer
+    const token = localStorage.getItem('access_token');
+    const url = token ? `${authUrl}?access_token=${encodeURIComponent(token)}` : authUrl;
+    window.location.href = url;
   };
 
   const handleDelete = async (id: string) => {
@@ -90,7 +123,10 @@ export default function AccountsPage() {
     try {
       await api.delete(`/platform-accounts/${id}`);
       setAccounts((prev) => prev.filter((a) => a.id !== id));
-    } catch { /* toast could go here */ }
+      addToast({ type: 'success', title: 'Disconnected', message: 'Account removed successfully.' });
+    } catch {
+      addToast({ type: 'error', title: 'Error', message: 'Could not remove account. Please try again.' });
+    }
     setDeleting(null);
   };
 
@@ -155,23 +191,23 @@ export default function AccountsPage() {
                     </button>
                   </div>
                 ) : (
-                  <button
-                    onClick={() => handleConnect(p.authUrl)}
-                    disabled={!p.authUrl}
-                    className={`w-full flex items-center justify-center gap-2 font-bold text-sm py-3 rounded-xl transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed ${
-                      p.authUrl
-                        ? 'bg-stone-900 hover:bg-black text-white'
-                        : 'bg-stone-100 text-stone-400'
-                    }`}
-                  >
-                    {p.authUrl ? (
-                      <><Globe className="w-4 h-4" /> Connect {p.label}</>
-                    ) : p.id === 'instagram' ? (
-                      'Auto-linked via Facebook'
-                    ) : (
-                      'Coming Soon'
-                    )}
-                  </button>
+                  {p.id === 'instagram' ? (
+                    <div className="text-center space-y-2">
+                      <p className="text-sm font-semibold text-stone-500">Auto-linked via Facebook</p>
+                      <p className="text-xs text-stone-400 flex items-center justify-center gap-1">
+                        <AlertTriangle className="w-3 h-3 text-amber-400" />
+                        Connect Facebook first to enable Instagram
+                      </p>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => handleConnect(p.authUrl)}
+                      disabled={!p.authUrl}
+                      className="w-full flex items-center justify-center gap-2 font-bold text-sm py-3 rounded-xl transition-colors shadow-sm bg-stone-900 hover:bg-black text-white"
+                    >
+                      <Globe className="w-4 h-4" /> Connect {p.label}
+                    </button>
+                  )}
                 )}
               </div>
             </div>

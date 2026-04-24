@@ -23,16 +23,6 @@ interface Vehicle {
   image_url: string;
 }
 
-const MOCK_VEHICLES: Vehicle[] = [
-  { id: '1', make: 'Hyundai', model: 'Creta', variant: 'SX(O) Turbo', year: 2024, price: 1999000, condition: 'new', color: 'Abyss Black', fuel_type: 'Petrol', stock_count: 3, status: 'in_stock', image_url: 'from-blue-900 to-blue-700' },
-  { id: '2', make: 'Maruti Suzuki', model: 'Brezza', variant: 'Alpha', year: 2024, price: 1399000, condition: 'new', color: 'Pearl Arctic White', fuel_type: 'Petrol', stock_count: 5, status: 'in_stock', image_url: 'from-gray-700 to-gray-500' },
-  { id: '3', make: 'Tata', model: 'Nexon EV', variant: 'Max XZ+', year: 2023, price: 1849000, condition: 'new', color: 'Flame Red', fuel_type: 'Electric', stock_count: 2, status: 'in_stock', image_url: 'from-red-700 to-red-500' },
-  { id: '4', make: 'Kia', model: 'Sonet', variant: 'HTX+', year: 2024, price: 1299000, condition: 'new', color: 'Imperial Blue', fuel_type: 'Diesel', stock_count: 4, status: 'in_stock', image_url: 'from-indigo-800 to-indigo-600' },
-  { id: '5', make: 'Hyundai', model: 'i20', variant: 'Asta (O)', year: 2023, price: 980000, condition: 'used', color: 'Typhoon Silver', fuel_type: 'Petrol', stock_count: 1, status: 'in_stock', image_url: 'from-slate-600 to-slate-400' },
-  { id: '6', make: 'Maruti Suzuki', model: 'Swift', variant: 'ZXi+', year: 2022, price: 720000, condition: 'used', color: 'Solid Red', fuel_type: 'Petrol', stock_count: 1, status: 'in_stock', image_url: 'from-rose-700 to-rose-500' },
-  { id: '7', make: 'Toyota', model: 'Fortuner', variant: 'Legender 4x2 AT', year: 2024, price: 4750000, condition: 'new', color: 'White Pearl Crystal Shine', fuel_type: 'Diesel', stock_count: 1, status: 'reserved', image_url: 'from-amber-700 to-amber-500' },
-  { id: '8', make: 'Honda', model: 'City', variant: 'ZX CVT', year: 2022, price: 1150000, condition: 'used', color: 'Lunar Silver Metallic', fuel_type: 'Petrol', stock_count: 1, status: 'sold', image_url: 'from-zinc-600 to-zinc-400' },
-];
 
 const STATUS_STYLES: Record<VehicleStatus, string> = {
   in_stock: 'bg-green-100 text-green-700',
@@ -70,7 +60,7 @@ const EMPTY_FORM = {
 
 export default function InventoryPage() {
   const navigate = useNavigate();
-  const [vehicles, setVehicles] = useState<Vehicle[]>(MOCK_VEHICLES);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
   const [search, setSearch] = useState('');
   const [filterCondition, setFilterCondition] = useState<'all' | Condition>('all');
   const [filterStatus, setFilterStatus] = useState<'all' | VehicleStatus>('all');
@@ -102,7 +92,7 @@ export default function InventoryPage() {
         status: item.status,
         image_url: makeGradient(item.make),
       }));
-      if (mapped.length > 0) setVehicles(mapped);
+      setVehicles(mapped);
     }).catch(console.error);
   }, []);
 

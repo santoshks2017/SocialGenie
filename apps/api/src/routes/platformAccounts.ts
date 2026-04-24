@@ -5,7 +5,6 @@ import type { Platform } from '../services/platformConnections.js';
 const VALID_PLATFORMS = new Set(['facebook', 'instagram', 'google']);
 
 interface SaveAccountBody {
-  userId?: string;
   platform?: string;
   accountId?: string;
   accountName?: string;
@@ -15,43 +14,48 @@ interface SaveAccountBody {
 }
 
 export default async function platformAccountRoutes(fastify: FastifyInstance) {
-  // GET /v1/platform-accounts — list all connected accounts for logged-in user
-  fastify.get('/', async (request, reply) => {
+  // GET /v1/platform-accounts — list connected accounts for the authenticated dealer
+  fastify.get('/', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const { platform } = request.query as { platform?: string };
 
     if (platform && !VALID_PLATFORMS.has(platform)) {
-      return reply.code(400).send({ error: `Invalid platform filter. Must be one of: ${[...VALID_PLATFORMS].join(', ')}` });
+      return reply.code(400).send({
+        error: `Invalid platform filter. Must be one of: ${[...VALID_PLATFORMS].join(', ')}`,
+      });
     }
 
-    // Use authenticated user if available, fallback to test-dealer
-    const userId = (request as unknown as { user?: { dealer_id?: string } }).user?.dealer_id ?? 'test-dealer';
+    const userId = request.user.dealer_id ?? 'anonymous';
 
     try {
       const accounts = await getAccountsByUser(userId, platform);
       return { success: true, accounts };
     } catch (err) {
-      fastify.log.error(`Failed to list platform accounts: ${String(err)}`);
+      fastify.log.error(err, '[PlatformAccounts] Failed to list accounts');
       return reply.code(500).send({ error: 'Failed to list platform accounts' });
     }
   });
 
-  // POST /v1/platform-accounts — save or update an account
-  fastify.post('/', async (request, reply) => {
+  // POST /v1/platform-accounts — manually save or update a platform account
+  fastify.post('/', { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const body = request.body as SaveAccountBody | undefined;
 
-    if (!body || !body.userId || !body.platform || !body.accountId || !body.accountName || !body.accessToken) {
+    if (!body || !body.platform || !body.accountId || !body.accountName || !body.accessToken) {
       return reply.code(400).send({
-        error: 'Missing required fields: userId, platform, accountId, accountName, accessToken',
+        error: 'Missing required fields: platform, accountId, accountName, accessToken',
       });
     }
 
     if (!VALID_PLATFORMS.has(body.platform)) {
-      return reply.code(400).send({ error: `Invalid platform. Must be one of: ${[...VALID_PLATFORMS].join(', ')}` });
+      return reply.code(400).send({
+        error: `Invalid platform. Must be one of: ${[...VALID_PLATFORMS].join(', ')}`,
+      });
     }
+
+    const userId = request.user.dealer_id ?? 'anonymous';
 
     try {
       const account = await saveAccount({
-        userId: body.userId,
+        userId,
         platform: body.platform as Platform,
         accountId: body.accountId,
         accountName: body.accountName,
@@ -60,40 +64,30 @@ export default async function platformAccountRoutes(fastify: FastifyInstance) {
         tokenExpiry: body.tokenExpiry ? new Date(body.tokenExpiry) : undefined,
       });
 
+      fastify.log.info(`[PlatformAccounts] Saved ${body.platform} account ${body.accountId} for dealer=${userId}`);
       return { success: true, account };
     } catch (err) {
-      fastify.log.error(`Failed to save platform account: ${String(err)}`);
+      fastify.log.error(err, '[PlatformAccounts] Failed to save account');
       return reply.code(500).send({ error: 'Failed to save platform account' });
     }
   });
 
-  // GET /v1/platform-accounts/:userId — get all accounts for a user
-  fastify.get('/:userId', async (request, reply) => {
-    const { userId } = request.params as { userId?: string };
-    if (!userId) return reply.code(400).send({ error: 'Missing userId' });
+  // DELETE /v1/platform-accounts/:id — disconnect a platform account
+  fastify.delete('/:id', { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const { id } = request.params as { id: string };
 
-    try {
-      const accounts = await getAccountsByUser(userId);
-      return { success: true, accounts };
-    } catch (err) {
-      fastify.log.error(`Failed to fetch platform accounts: ${String(err)}`);
-      return reply.code(500).send({ error: 'Failed to fetch platform accounts' });
+    if (!id) {
+      return reply.code(400).send({ error: 'Missing account id' });
     }
-  });
 
-  // DELETE /v1/platform-accounts/:id — delete an account
-  fastify.delete('/:id', async (request, reply) => {
-    const { id } = request.params as { id?: string };
-    const body = request.body as { userId?: string } | undefined;
-    const userId = body?.userId;
-
-    if (!id || !userId) return reply.code(400).send({ error: 'Missing id or userId' });
+    const userId = request.user.dealer_id ?? 'anonymous';
 
     try {
       await deleteAccount(id, userId);
+      fastify.log.info(`[PlatformAccounts] Deleted account ${id} for dealer=${userId}`);
       return { success: true };
     } catch (err) {
-      fastify.log.error(`Failed to delete platform account: ${String(err)}`);
+      fastify.log.error(err, '[PlatformAccounts] Failed to delete account');
       return reply.code(500).send({ error: 'Failed to delete platform account' });
     }
   });

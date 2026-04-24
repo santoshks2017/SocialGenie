@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import {
   Car, Plus, MessageSquare, Bell,
   Calendar, BarChart2, Package, Zap, Settings, Link2,
@@ -27,20 +27,29 @@ const NAV_ITEMS = [
   { to: '/',          icon: LayoutDashboard, label: 'Dashboard',  exact: true },
   { to: '/calendar',  icon: Calendar,        label: 'Calendar'               },
   { to: '/analytics', icon: BarChart2,       label: 'Analytics'              },
-  { to: '/inbox',     icon: MessageSquare,   label: 'Inbox',      badge: 4   },
+  { to: '/inbox',     icon: MessageSquare,   label: 'Inbox'                  },
   { to: '/inventory', icon: Package,         label: 'Inventory'              },
   { to: '/boost',     icon: Zap,             label: 'Boost'                  },
   { to: '/accounts',  icon: Link2,           label: 'Accounts'               },
-  { to: '/create',    icon: Video,           label: 'AI Video',   isNew: true },
 ];
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose: () => void }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [inboxPending, setInboxPending] = useState<number>(0);
   const initials = user?.name
     ? user.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()
     : 'U';
+
+  useEffect(() => {
+    api.get<{ stats?: { inboxPending?: number } }>('/dealer/dashboard')
+      .then((res) => setInboxPending(res.stats?.inboxPending ?? 0))
+      .catch(() => {});
+  }, []);
+
+  const isVideoMode = location.pathname === '/create' && location.search.includes('mode=video');
 
   const handleLogout = () => { logout(); navigate('/onboarding'); };
 
@@ -78,7 +87,7 @@ function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose: () => 
 
       {/* Nav items */}
       <nav className="flex-1 px-3 space-y-0.5 overflow-y-auto py-1">
-        {NAV_ITEMS.filter(i => i.to !== '/create').map(({ to, icon: Icon, label, exact, badge, isNew }) => (
+        {NAV_ITEMS.map(({ to, icon: Icon, label, exact }) => (
           <NavLink
             key={to}
             to={to}
@@ -96,14 +105,9 @@ function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose: () => 
               <>
                 <Icon className={`w-[18px] h-[18px] flex-shrink-0 transition-colors ${isActive ? 'text-white' : 'text-white/40 group-hover:text-white/70'}`} />
                 {label}
-                {badge && (
+                {label === 'Inbox' && inboxPending > 0 && (
                   <span className="ml-auto bg-orange-500 text-white text-[10px] font-bold rounded-full min-w-[18px] h-[18px] flex items-center justify-center px-1">
-                    {badge}
-                  </span>
-                )}
-                {isNew && !badge && (
-                  <span className="ml-auto bg-teal-500/20 text-teal-400 text-[10px] font-bold rounded-full px-1.5 py-0.5">
-                    NEW
+                    {inboxPending}
                   </span>
                 )}
               </>
@@ -111,27 +115,23 @@ function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose: () => 
           </NavLink>
         ))}
 
-        {/* AI Video special entry */}
+        {/* AI Video — coming soon; uses manual active check to avoid false-positive at /create */}
         <NavLink
           to="/create?mode=video"
           onClick={onClose}
-          className={({ isActive }) =>
+          className={() =>
             `group flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13.5px] font-medium transition-all ${
-              isActive
+              isVideoMode
                 ? 'bg-white/10 text-white'
                 : 'text-white/50 hover:text-white hover:bg-white/5'
             }`
           }
         >
-          {({ isActive }) => (
-            <>
-              <Video className={`w-[18px] h-[18px] flex-shrink-0 transition-colors ${isActive ? 'text-white' : 'text-white/40 group-hover:text-white/70'}`} />
-              AI Video
-              <span className="ml-auto bg-purple-500/20 text-purple-400 text-[10px] font-bold rounded-full px-1.5 py-0.5">
-                NEW
-              </span>
-            </>
-          )}
+          <Video className={`w-[18px] h-[18px] flex-shrink-0 transition-colors ${isVideoMode ? 'text-white' : 'text-white/40 group-hover:text-white/70'}`} />
+          AI Video
+          <span className="ml-auto bg-slate-500/20 text-slate-400 text-[10px] font-bold rounded-full px-1.5 py-0.5">
+            Soon
+          </span>
         </NavLink>
       </nav>
 
@@ -276,6 +276,8 @@ function SuggestedPostCard({ data }: { data: DashboardData | null }) {
   const badgeLabel = festival?.category ?? 'Weekend Offer';
   const dateStr = (festival ? new Date(festival.date) : new Date())
     .toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short' });
+  const postType = festival ? 'festival' : 'promotional';
+  const createUrl = `/create?prompt=${encodeURIComponent(title)}&postType=${encodeURIComponent(postType)}`;
 
   return (
     <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm">
@@ -314,10 +316,10 @@ function SuggestedPostCard({ data }: { data: DashboardData | null }) {
             ))}
           </div>
           <div className="flex items-center gap-2">
-            <NavLink to="/create" className="flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors">
+            <NavLink to={createUrl} className="flex items-center gap-1.5 bg-orange-500 hover:bg-orange-600 text-white text-xs font-bold px-4 py-2 rounded-lg transition-colors">
               <Send className="w-3 h-3" /> Post Everywhere
             </NavLink>
-            <NavLink to="/create" className="text-xs font-semibold text-slate-600 hover:text-slate-900 px-3 py-2 rounded-lg border border-slate-200 hover:border-slate-300 bg-white transition-colors">
+            <NavLink to={createUrl} className="text-xs font-semibold text-slate-600 hover:text-slate-900 px-3 py-2 rounded-lg border border-slate-200 hover:border-slate-300 bg-white transition-colors">
               Edit First
             </NavLink>
             <button className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-600 px-2 py-2 transition-colors">
@@ -385,19 +387,33 @@ function InboxPreview({ stats }: { stats?: DashboardData['stats'] }) {
   );
 }
 
-function ComingUpPanel({ festivals }: { festivals?: DashboardData['upcomingFestivals'] }) {
-  const defaults = [
-    { label: 'Republic Day', dateStr: 'Jan 26', sub: 'Festival post ready' },
-    { label: 'Month-End Offer', dateStr: 'Jan 31', sub: 'Suggest closing deals' },
-    { label: 'New Arrival Post', dateStr: 'Upcoming', sub: 'Swift 2026 stock arriving' },
+function getUpcomingDefaults() {
+  const today = new Date();
+  const fmt = (d: Date) => d.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+
+  const nextSat = new Date(today);
+  const daysToSat = (6 - today.getDay() + 7) % 7 || 7;
+  nextSat.setDate(today.getDate() + daysToSat);
+
+  const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+
+  const nextMonthMid = new Date(today.getFullYear(), today.getMonth() + 1, 15);
+
+  return [
+    { label: 'Weekend Test Drive Special', dateStr: fmt(nextSat), sub: 'Schedule a post' },
+    { label: 'Month-End Closing Offer', dateStr: fmt(endOfMonth), sub: 'Suggest closing deals' },
+    { label: 'New Arrival Announcement', dateStr: fmt(nextMonthMid), sub: 'Plan ahead' },
   ];
+}
+
+function ComingUpPanel({ festivals }: { festivals?: DashboardData['upcomingFestivals'] }) {
   const items = festivals?.length
     ? festivals.slice(0, 3).map((f) => ({
         label: f.name_en,
         dateStr: new Date(f.date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' }),
         sub: f.category ?? 'Festival',
       }))
-    : defaults;
+    : getUpcomingDefaults();
 
   return (
     <div className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm">
@@ -511,7 +527,7 @@ function ConnectedPanel() {
 function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const { user } = useAuth();
-  const firstName = user?.name?.split(' ')[0] ?? 'there';
+  const firstName = user?.name?.split(' ')[0];
   const hour = new Date().getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
 
@@ -525,7 +541,7 @@ function Dashboard() {
     <div className="max-w-[1180px] mx-auto">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-xl font-bold text-slate-900">{greeting}, {firstName} 👋</h1>
+        <h1 className="text-xl font-bold text-slate-900">{greeting}{firstName ? `, ${firstName}` : ''} 👋</h1>
         <p className="text-sm text-slate-400 mt-0.5">Your dealership social presence at a glance</p>
       </div>
 

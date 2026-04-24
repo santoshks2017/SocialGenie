@@ -386,11 +386,37 @@ export default async function authRoutes(fastify: FastifyInstance) {
   })
 
   // ─── Facebook OAuth ────────────────────────────────────────────────────────
-  
+
   const FB_API_VERSION = 'v18.0';
   const FB_SCOPES = ['pages_show_list', 'pages_read_engagement', 'instagram_basic', 'instagram_content_publish'].join(',');
 
-  fastify.get('/facebook', async (_request, reply) => {
+  // Encode dealer_id into the OAuth state so the callback knows which dealer to associate accounts with.
+  function encodeOAuthState(dealerId: string): string {
+    return Buffer.from(dealerId, 'utf8').toString('base64url');
+  }
+  function decodeOAuthState(state: string): string | null {
+    try {
+      const decoded = Buffer.from(state, 'base64url').toString('utf8');
+      // Basic sanity check — dealer IDs are UUIDs or similar short strings
+      if (!decoded || decoded.length > 200) return null;
+      return decoded;
+    } catch {
+      return null;
+    }
+  }
+
+  // Extract and verify dealer_id from the access_token query param sent by the frontend.
+  function extractDealerFromToken(token: string | undefined): string | null {
+    if (!token) return null;
+    try {
+      const payload = fastify.jwt.verify<JwtUser>(token);
+      return payload.dealer_id ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  fastify.get('/facebook', async (request, reply) => {
     const META_APP_ID = process.env['META_APP_ID'];
     const META_REDIRECT_URI = process.env['META_REDIRECT_URI'];
 
@@ -399,33 +425,48 @@ export default async function authRoutes(fastify: FastifyInstance) {
       return reply.code(500).send({ error: 'Facebook OAuth not configured on server' });
     }
 
+    const { access_token } = request.query as { access_token?: string };
+    const dealerId = extractDealerFromToken(access_token);
+    if (!dealerId) {
+      fastify.log.warn('[FB OAuth] No valid access_token in query — dealer cannot be identified');
+    }
+    const state = dealerId ? encodeOAuthState(dealerId) : 'anonymous';
+
     const authUrl = new URL(`https://www.facebook.com/${FB_API_VERSION}/dialog/oauth`);
     authUrl.searchParams.set('client_id', META_APP_ID);
     authUrl.searchParams.set('redirect_uri', META_REDIRECT_URI);
     authUrl.searchParams.set('scope', FB_SCOPES);
     authUrl.searchParams.set('response_type', 'code');
+    authUrl.searchParams.set('state', state);
 
+    fastify.log.info(`[FB OAuth] Initiating flow for dealer=${dealerId ?? 'unknown'}`);
     return reply.redirect(authUrl.toString());
   });
 
   fastify.get('/facebook/callback', async (request, reply) => {
-    const { code, error: fbError } = request.query as { code?: string; error?: string };
+    const { code, error: fbError, state } = request.query as { code?: string; error?: string; state?: string };
     const FRONTEND_URL = process.env['FRONTEND_URL'] ?? 'https://social-genie-web.vercel.app';
 
     if (fbError || !code) {
+      fastify.log.warn(`[FB OAuth] Callback error: ${fbError ?? 'no_code'}`);
       return reply.redirect(`${FRONTEND_URL}/accounts?error=${encodeURIComponent(fbError ?? 'no_code')}`);
     }
+
+    // Recover dealer_id from state
+    const dealerId = (state && state !== 'anonymous') ? decodeOAuthState(state) : null;
+    fastify.log.info(`[FB OAuth] Callback received for dealer=${dealerId ?? 'unknown'}`);
 
     const META_APP_ID = process.env['META_APP_ID'];
     const META_APP_SECRET = process.env['META_APP_SECRET'];
     const META_REDIRECT_URI = process.env['META_REDIRECT_URI'];
 
     if (!META_APP_ID || !META_APP_SECRET || !META_REDIRECT_URI) {
+      fastify.log.error('[FB OAuth] Missing server config in callback');
       return reply.redirect(`${FRONTEND_URL}/accounts?error=server_config`);
     }
 
     try {
-      // Exchange code
+      // Exchange code for user access token
       const tokenUrl = new URL(`https://graph.facebook.com/${FB_API_VERSION}/oauth/access_token`);
       tokenUrl.searchParams.set('client_id', META_APP_ID);
       tokenUrl.searchParams.set('client_secret', META_APP_SECRET);
@@ -433,52 +474,63 @@ export default async function authRoutes(fastify: FastifyInstance) {
       tokenUrl.searchParams.set('code', code);
 
       const tokenRes = await fetch(tokenUrl.toString());
-      const tokenData = await tokenRes.json() as any;
+      const tokenData = await tokenRes.json() as { access_token?: string; error?: { message?: string } };
+
+      if (!tokenData.access_token) {
+        fastify.log.error({ tokenData }, '[FB OAuth] Token exchange failed — no access_token returned');
+        return reply.redirect(`${FRONTEND_URL}/accounts?error=token_exchange_failed`);
+      }
       const userAccessToken = tokenData.access_token;
 
       // Fetch pages
       const pagesUrl = `https://graph.facebook.com/${FB_API_VERSION}/me/accounts?access_token=${userAccessToken}&fields=id,name,access_token`;
       const pagesRes = await fetch(pagesUrl);
-      const pagesData = await pagesRes.json() as any;
+      const pagesData = await pagesRes.json() as { data?: Array<{ id: string; name: string; access_token: string }> };
       const pages = pagesData.data ?? [];
+
+      fastify.log.info(`[FB OAuth] Found ${pages.length} pages for dealer=${dealerId ?? 'unknown'}`);
 
       let fbCount = 0;
       let igCount = 0;
+      const userId = dealerId ?? 'anonymous';
 
       for (const page of pages) {
         await saveAccount({
-          userId: 'test-dealer',
+          userId,
           platform: 'facebook',
           accountId: page.id,
           accountName: page.name,
           accessToken: page.access_token,
         });
         fbCount++;
+        fastify.log.info(`[FB OAuth] Saved FB page: ${page.name} (${page.id}) → dealer=${userId}`);
 
-        // Check IG
+        // Check for linked Instagram Business account
         const igUrl = `https://graph.facebook.com/${FB_API_VERSION}/${page.id}?fields=instagram_business_account&access_token=${page.access_token}`;
         const igRes = await fetch(igUrl);
-        const igData = await igRes.json() as any;
+        const igData = await igRes.json() as { instagram_business_account?: { id: string } };
 
         if (igData.instagram_business_account?.id) {
           const igId = igData.instagram_business_account.id;
           const igDetailsRes = await fetch(`https://graph.facebook.com/${FB_API_VERSION}/${igId}?fields=id,username&access_token=${page.access_token}`);
-          const igDetails = await igDetailsRes.json() as any;
+          const igDetails = await igDetailsRes.json() as { id: string; username?: string };
 
           await saveAccount({
-            userId: 'test-dealer',
+            userId,
             platform: 'instagram',
             accountId: igDetails.id,
-            accountName: igDetails.username ?? `IG-${igDetails.id}`,
+            accountName: igDetails.username ?? `ig_${igDetails.id}`,
             accessToken: page.access_token,
           });
           igCount++;
+          fastify.log.info(`[FB OAuth] Saved IG account: ${igDetails.username ?? igDetails.id} → dealer=${userId}`);
         }
       }
 
+      fastify.log.info(`[FB OAuth] Complete: ${fbCount} FB pages, ${igCount} IG accounts saved for dealer=${userId}`);
       return reply.redirect(`${FRONTEND_URL}/accounts?success=true&fb=${fbCount}&ig=${igCount}`);
     } catch (err) {
-      fastify.log.error(err, '[FB OAuth] Callback failed');
+      fastify.log.error(err, '[FB OAuth] Callback failed with unexpected error');
       return reply.redirect(`${FRONTEND_URL}/accounts?error=token_exchange_failed`);
     }
   });
@@ -491,13 +543,21 @@ export default async function authRoutes(fastify: FastifyInstance) {
     'https://www.googleapis.com/auth/userinfo.email',
   ].join(' ');
 
-  fastify.get('/google', async (_request, reply) => {
+  fastify.get('/google', async (request, reply) => {
     const GOOGLE_CLIENT_ID = process.env['GOOGLE_CLIENT_ID'];
     const GOOGLE_REDIRECT_URI = process.env['GOOGLE_REDIRECT_URI'];
 
     if (!GOOGLE_CLIENT_ID || !GOOGLE_REDIRECT_URI) {
+      fastify.log.error('[Google OAuth] Missing GOOGLE_CLIENT_ID or GOOGLE_REDIRECT_URI');
       return reply.code(500).send({ error: 'Google OAuth not configured on server' });
     }
+
+    const { access_token } = request.query as { access_token?: string };
+    const dealerId = extractDealerFromToken(access_token);
+    if (!dealerId) {
+      fastify.log.warn('[Google OAuth] No valid access_token in query — dealer cannot be identified');
+    }
+    const state = dealerId ? encodeOAuthState(dealerId) : 'anonymous';
 
     const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
     authUrl.searchParams.set('client_id', GOOGLE_CLIENT_ID);
@@ -506,23 +566,30 @@ export default async function authRoutes(fastify: FastifyInstance) {
     authUrl.searchParams.set('response_type', 'code');
     authUrl.searchParams.set('access_type', 'offline');
     authUrl.searchParams.set('prompt', 'consent');
+    authUrl.searchParams.set('state', state);
 
+    fastify.log.info(`[Google OAuth] Initiating flow for dealer=${dealerId ?? 'unknown'}`);
     return reply.redirect(authUrl.toString());
   });
 
   fastify.get('/google/callback', async (request, reply) => {
-    const { code, error: gError } = request.query as { code?: string; error?: string };
+    const { code, error: gError, state } = request.query as { code?: string; error?: string; state?: string };
     const FRONTEND_URL = process.env['FRONTEND_URL'] ?? 'https://social-genie-web.vercel.app';
 
     if (gError || !code) {
+      fastify.log.warn(`[Google OAuth] Callback error: ${gError ?? 'no_code'}`);
       return reply.redirect(`${FRONTEND_URL}/accounts?error=${encodeURIComponent(gError ?? 'no_code')}`);
     }
+
+    const dealerId = (state && state !== 'anonymous') ? decodeOAuthState(state) : null;
+    fastify.log.info(`[Google OAuth] Callback received for dealer=${dealerId ?? 'unknown'}`);
 
     const GOOGLE_CLIENT_ID = process.env['GOOGLE_CLIENT_ID'];
     const GOOGLE_CLIENT_SECRET = process.env['GOOGLE_CLIENT_SECRET'];
     const GOOGLE_REDIRECT_URI = process.env['GOOGLE_REDIRECT_URI'];
 
     if (!GOOGLE_CLIENT_ID || !GOOGLE_CLIENT_SECRET || !GOOGLE_REDIRECT_URI) {
+      fastify.log.error('[Google OAuth] Missing server config in callback');
       return reply.redirect(`${FRONTEND_URL}/accounts?error=server_config`);
     }
 
@@ -539,44 +606,56 @@ export default async function authRoutes(fastify: FastifyInstance) {
         }),
       });
 
-      const tokenData = await tokenRes.json() as any;
+      const tokenData = await tokenRes.json() as { access_token?: string; refresh_token?: string; error?: string };
+
+      if (!tokenData.access_token) {
+        fastify.log.error({ tokenData }, '[Google OAuth] Token exchange failed — no access_token returned');
+        return reply.redirect(`${FRONTEND_URL}/accounts?error=token_exchange_failed`);
+      }
       const accessToken = tokenData.access_token;
       const refreshToken = tokenData.refresh_token;
 
-      // Fetch accounts
+      // Fetch Google Business Profile accounts
       const accountsRes = await fetch('https://mybusinessaccountmanagement.googleapis.com/v1/accounts', {
         headers: { Authorization: `Bearer ${accessToken}` },
       });
-      const accountsData = await accountsRes.json() as any;
+      const accountsData = await accountsRes.json() as { accounts?: Array<{ name: string; accountName?: string }> };
       const accounts = accountsData.accounts ?? [];
 
+      fastify.log.info(`[Google OAuth] Found ${accounts.length} GBP accounts for dealer=${dealerId ?? 'unknown'}`);
+
+      const userId = dealerId ?? 'anonymous';
       let savedCount = 0;
+
       for (const account of accounts) {
         const accountId = account.name.replace('accounts/', '');
-        
-        // Fetch locations
-        const locationsRes = await fetch(`https://mybusinessbusinessinformation.googleapis.com/v1/${account.name}/locations?readMask=name,title`, {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        });
-        const locData = await locationsRes.json() as any;
+
+        // Fetch locations under this account
+        const locationsRes = await fetch(
+          `https://mybusinessbusinessinformation.googleapis.com/v1/${account.name}/locations?readMask=name,title`,
+          { headers: { Authorization: `Bearer ${accessToken}` } },
+        );
+        const locData = await locationsRes.json() as { locations?: Array<{ name: string; title?: string }> };
         const locations = locData.locations ?? [];
 
         for (const loc of locations) {
           const locId = loc.name.replace('locations/', '');
           await saveAccount({
-            userId: 'test-dealer',
+            userId,
             platform: 'google',
             accountId: `${accountId}/${locId}`,
-            accountName: loc.title || account.accountName,
+            accountName: loc.title || account.accountName || `Location ${locId}`,
             accessToken,
             refreshToken,
           });
           savedCount++;
+          fastify.log.info(`[Google OAuth] Saved GMB location: ${loc.title ?? locId} → dealer=${userId}`);
         }
 
+        // If no locations, save the account itself
         if (locations.length === 0) {
           await saveAccount({
-            userId: 'test-dealer',
+            userId,
             platform: 'google',
             accountId,
             accountName: account.accountName || `Google Business ${accountId}`,
@@ -584,12 +663,14 @@ export default async function authRoutes(fastify: FastifyInstance) {
             refreshToken,
           });
           savedCount++;
+          fastify.log.info(`[Google OAuth] Saved GMB account (no locations): ${accountId} → dealer=${userId}`);
         }
       }
 
+      fastify.log.info(`[Google OAuth] Complete: ${savedCount} locations saved for dealer=${userId}`);
       return reply.redirect(`${FRONTEND_URL}/accounts?success=true&google=${savedCount}`);
     } catch (err) {
-      fastify.log.error(err, '[Google OAuth] Callback failed');
+      fastify.log.error(err, '[Google OAuth] Callback failed with unexpected error');
       return reply.redirect(`${FRONTEND_URL}/accounts?error=token_exchange_failed`);
     }
   });

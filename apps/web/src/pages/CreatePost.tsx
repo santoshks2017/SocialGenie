@@ -1,8 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { NavLink, useSearchParams } from 'react-router-dom';
 import { creativeService, postService } from '../services/creative';
 import type { AIGenerationResponse, CaptionVariant } from '../services/creative';
 import { useToast } from '../components/ui/Toast';
+import { useAuth } from '../contexts/AuthContext';
 import { generateBrandedCreative } from '../services/imageGeneration';
 import {
   Tag, Sparkles, Heart, Gift, PenLine,
@@ -31,11 +32,11 @@ function IgIcon({ className }: { className?: string }) {
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 const POST_TYPES = [
-  { id: 'offer',    icon: Tag,     label: "Today's Offer",     color: 'text-orange-600', bg: 'bg-orange-50',  activeBg: 'bg-orange-600',  category: 'Festival Offer', starter: 'Special weekend offer — ' },
-  { id: 'arrival',  icon: Sparkles,label: 'New Arrival',       color: 'text-teal-600',   bg: 'bg-teal-50',    activeBg: 'bg-teal-600',    category: 'New Arrival',   starter: 'New vehicle just arrived — ' },
-  { id: 'delivery', icon: Heart,   label: 'Delivery Post',     color: 'text-pink-600',   bg: 'bg-pink-50',    activeBg: 'bg-pink-600',    category: 'Testimonial',   starter: 'Happy delivery to our valued customer — ' },
-  { id: 'festival', icon: Gift,    label: 'Festival Post',     color: 'text-purple-600', bg: 'bg-purple-50',  activeBg: 'bg-purple-600',  category: 'Festival Offer', starter: 'Celebrate this festival with us — ' },
-  { id: 'custom',   icon: PenLine, label: 'Custom',            color: 'text-stone-600',  bg: 'bg-stone-100',  activeBg: 'bg-stone-700',   category: 'Engagement',    starter: '' },
+  { id: 'offer',    icon: Tag,     label: "Today's Offer",  color: 'text-orange-600', bg: 'bg-orange-50',  activeBg: 'bg-orange-600',  category: 'Festival Offer', starter: 'Special weekend offer — ' },
+  { id: 'arrival',  icon: Sparkles,label: 'New Arrival',    color: 'text-teal-600',   bg: 'bg-teal-50',    activeBg: 'bg-teal-600',    category: 'New Arrival',   starter: 'New vehicle just arrived — ' },
+  { id: 'delivery', icon: Heart,   label: 'Delivery Post',  color: 'text-pink-600',   bg: 'bg-pink-50',    activeBg: 'bg-pink-600',    category: 'Testimonial',   starter: 'Happy delivery to our valued customer — ' },
+  { id: 'festival', icon: Gift,    label: 'Festival Post',  color: 'text-purple-600', bg: 'bg-purple-50',  activeBg: 'bg-purple-600',  category: 'Festival Offer', starter: 'Celebrate this festival with us — ' },
+  { id: 'custom',   icon: PenLine, label: 'Custom',         color: 'text-stone-600',  bg: 'bg-stone-100',  activeBg: 'bg-stone-700',   category: 'Engagement',    starter: '' },
 ] as const;
 
 const PROMPT_CHIPS: Record<string, string[]> = {
@@ -73,18 +74,55 @@ const TEMPLATE_THEMES = [
   { label: 'Offer Card',    gradient: 'from-teal-700 to-teal-600',     accent: 'bg-white/20',     sub: 'LIMITED TIME' },
 ] as const;
 
+const DRAFT_STORAGE_KEY = 'sg_create_draft';
+
+interface DraftState {
+  prompt: string;
+  selectedPostType: string | null;
+  caption: string;
+  selectedPlatforms: string[];
+  toneActive: 'hinglish' | 'english' | 'hindi';
+  mediaTab: 'upload' | 'ai' | 'url';
+}
+
 // ─── CreatePost ───────────────────────────────────────────────────────────────
 export default function CreatePost() {
   const [searchParams] = useSearchParams();
-  const [prompt, setPrompt] = useState(() => searchParams.get('prompt') ?? '');
-  const [selectedPostType, setSelectedPostType] = useState<string | null>(null);
+  const { user } = useAuth();
+
+  // Restore draft from localStorage on mount
+  const getInitialDraft = (): Partial<DraftState> => {
+    try {
+      const stored = localStorage.getItem(DRAFT_STORAGE_KEY);
+      return stored ? (JSON.parse(stored) as DraftState) : {};
+    } catch {
+      return {};
+    }
+  };
+  const draft = getInitialDraft();
+
+  const [prompt, setPrompt] = useState(() => searchParams.get('prompt') ?? draft.prompt ?? '');
+  const [selectedPostType, setSelectedPostType] = useState<string | null>(
+    () => searchParams.get('postType') ?? draft.selectedPostType ?? null,
+  );
   const [activeCategory, setActiveCategory] = useState('Festival Offer');
   const [isGenerating, setIsGenerating] = useState(false);
   const [variants, setVariants] = useState<AIGenerationResponse | null>(null);
+  // selectedVariant controls which CAPTION is active; selectedDesign controls which template card is highlighted
   const [selectedVariant, setSelectedVariant] = useState(0);
-  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(['facebook', 'instagram', 'gmb']);
-  const [activePlatformPreview, setActivePlatformPreview] = useState<'google' | 'facebook' | 'instagram'>('google');
-  const [caption, setCaption] = useState('');
+  const [selectedDesign, setSelectedDesign] = useState(0);
+  const [selectedPlatforms, setSelectedPlatforms] = useState<string[]>(
+    () => draft.selectedPlatforms ?? ['facebook', 'instagram', 'gmb'],
+  );
+  // Default preview to Facebook (most commonly used, per M12)
+  const [activePlatformPreview, setActivePlatformPreview] = useState<'google' | 'facebook' | 'instagram'>('facebook');
+  const [caption, setCaption] = useState(() => draft.caption ?? '');
+  // Language variants — stored per-generate, switched on tab change (C6)
+  const [englishCaptions, setEnglishCaptions] = useState<CaptionVariant[] | null>(null);
+  const [hindiCaptions, setHindiCaptions] = useState<CaptionVariant[] | null>(null);
+  const [toneActive, setToneActive] = useState<'hinglish' | 'english' | 'hindi'>(
+    () => draft.toneActive ?? 'english',
+  );
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [scheduleTime, setScheduleTime] = useState('');
   const [published, setPublished] = useState(false);
@@ -93,14 +131,14 @@ export default function CreatePost() {
   const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
   const [uploadedVideoName, setUploadedVideoName] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
-  const [toneActive, setToneActive] = useState<'hinglish' | 'english' | 'hindi'>('hinglish');
-  const [mediaTab, setMediaTab] = useState<'upload' | 'ai' | 'url'>('ai');
+  const [mediaTab, setMediaTab] = useState<'upload' | 'ai' | 'url'>(() => draft.mediaTab ?? 'ai');
   const [inspirationImageId, setInspirationImageId] = useState<string | null>(null);
   const [inspirationImageUrl, setInspirationImageUrl] = useState<string | null>(null);
   const [aiImageUrls, setAiImageUrls] = useState<(string | null)[]>([null, null, null]);
   const [isGeneratingImages, setIsGeneratingImages] = useState(false);
   const [imageLoadingStates, setImageLoadingStates] = useState<boolean[]>([false, false, false]);
-  
+  const [connectedAccounts, setConnectedAccounts] = useState<string[]>([]);
+
   // URL Generation states
   const [sourceUrl, setSourceUrl] = useState('');
   const [urlCar, setUrlCar] = useState('');
@@ -128,8 +166,42 @@ export default function CreatePost() {
   const [uploadingVideoImage, setUploadingVideoImage] = useState(false);
   const videoImageRef = useRef<HTMLInputElement>(null);
 
+  // Dealer display name — prefer dealer profile, fall back to auth user name
+  const dealerDisplayName = user?.name ?? 'Your Dealership';
+  const dealerInitials = dealerDisplayName
+    .split(' ')
+    .map((w) => w[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase();
+
+  // Fetch connected platform accounts to guard publish (C3)
+  useEffect(() => {
+    api.get<{ success: boolean; accounts: Array<{ platform: string }> }>('/platform-accounts')
+      .then((res) => setConnectedAccounts((res.accounts ?? []).map((a) => a.platform)))
+      .catch(() => setConnectedAccounts([]));
+  }, []);
+
+  // Auto-save draft to localStorage whenever key fields change (C9)
+  const saveDraft = useCallback(() => {
+    if (!prompt && !caption) return; // don't save empty state
+    const state: DraftState = { prompt, selectedPostType, caption, selectedPlatforms, toneActive, mediaTab };
+    try { localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(state)); } catch { /* ignore */ }
+  }, [prompt, selectedPostType, caption, selectedPlatforms, toneActive, mediaTab]);
+
+  useEffect(() => { saveDraft(); }, [saveDraft]);
+
   useEffect(() => { creativeService.getPrompts().catch(console.error); }, []);
-  useEffect(() => { const p = searchParams.get('prompt'); if (p) setPrompt(p); }, [searchParams]);
+  useEffect(() => {
+    const p = searchParams.get('prompt');
+    if (p) setPrompt(p);
+    const pt = searchParams.get('postType');
+    if (pt) {
+      setSelectedPostType(pt);
+      const type = POST_TYPES.find((t) => t.id === pt);
+      if (type) setActiveCategory(type.category);
+    }
+  }, [searchParams]);
 
   const handleTypeSelect = (type: (typeof POST_TYPES)[number]) => {
     setSelectedPostType(type.id);
@@ -189,22 +261,15 @@ export default function CreatePost() {
             if (mediaTab === 'ai') {
               setInspirationImageUrl(localUrl);
               setInspirationImageId('pasted');
-              // Also attempt server upload silently
               const res = await uploadFileAPI(file);
-              if (res) {
-                setInspirationImageId(res.id);
-                setInspirationImageUrl(res.url);
-              }
+              if (res) { setInspirationImageId(res.id); setInspirationImageUrl(res.url); }
             } else {
               setMediaTab('upload');
               setUploadedImageUrl(localUrl);
               setUploadedImageId('pasted');
               setUploadedVideoName(null);
               const res = await uploadFileAPI(file);
-              if (res) {
-                setUploadedImageId(res.id);
-                setUploadedImageUrl(res.url);
-              }
+              if (res) { setUploadedImageId(res.id); setUploadedImageUrl(res.url); }
             }
             setTimeout(() => setIsPasting(false), 1500);
             break;
@@ -243,7 +308,10 @@ export default function CreatePost() {
     setIsGeneratingImages(true);
     let pending = slots.length;
     slots.forEach((v, i) => {
-      generateBrandedCreative(v.caption_text, currentPrompt, i)
+      // Add template-specific style hint so each variant generates a visually distinct image
+      const styleHints = ['bold high-contrast dramatic lighting', 'minimal clean white background', 'warm lifestyle family setting'];
+      const styledPrompt = `${currentPrompt} — ${styleHints[i] ?? ''}`;
+      generateBrandedCreative(v.caption_text, styledPrompt, i)
         .then((url) => { setAiImageUrls((prev) => { const n = [...prev]; n[i] = url; return n; }); })
         .catch(() => {})
         .finally(() => {
@@ -254,8 +322,22 @@ export default function CreatePost() {
     });
   };
 
+  // Switch caption text when language tab changes (C6)
+  const handleToneChange = (tone: 'hinglish' | 'english' | 'hindi') => {
+    setToneActive(tone);
+    if (!variants) return;
+    const sourceCaptions =
+      tone === 'hindi' && hindiCaptions
+        ? hindiCaptions
+        : englishCaptions ?? variants.captions;
+    setCaption(sourceCaptions[selectedVariant]?.caption_text ?? '');
+  };
+
   const handleGenerate = async (force = false) => {
-    if (!prompt.trim()) return;
+    if (!prompt.trim()) {
+      addToast({ type: 'error', title: 'Description required', message: 'Please enter a post description before generating.' });
+      return;
+    }
     setIsGenerating(true);
     if (!force) {
       setVariants(null);
@@ -265,14 +347,33 @@ export default function CreatePost() {
     }
     try {
       const imageIdToUse = mediaTab === 'upload' ? (uploadedImageId ?? undefined) : (inspirationImageId ?? undefined);
-      const res = await creativeService.generateCaptions(prompt, selectedPlatforms, imageIdToUse, force);
+      // Always request Hindi variants so the language toggle has real content
+      const res = await api.post<AIGenerationResponse>('/creatives/generate', {
+        prompt,
+        platforms: selectedPlatforms,
+        image_id: imageIdToUse,
+        force,
+        includeHindi: true,
+        post_type: selectedPostType ?? undefined,
+      });
       setVariants(res);
+      setEnglishCaptions(res.captions);
+      setHindiCaptions(res.hindi_captions);
       setSelectedVariant(0);
-      setCaption(res.captions[0]?.caption_text ?? '');
-      
+      setSelectedDesign(0);
+
+      // Set caption based on current language tab
+      const initial = toneActive === 'hindi' && res.hindi_captions
+        ? res.hindi_captions[0]?.caption_text
+        : res.captions[0]?.caption_text;
+      setCaption(initial ?? '');
+
       if (mediaTab === 'ai') {
         generateImagesForVariants(res.captions, prompt);
       }
+
+      // Clear saved draft after a successful generate (content is now in view)
+      localStorage.removeItem(DRAFT_STORAGE_KEY);
     } catch (err) {
       console.error(err);
       addToast({ type: 'error', title: 'Generation failed', message: 'Could not generate captions. Check API logs.' });
@@ -288,11 +389,11 @@ export default function CreatePost() {
     try {
       const res = await creativeService.generateFromUrl({
         url: sourceUrl,
-        dealerId: 'test-dealer',
+        dealerId: 'self',
         car: urlCar || 'Any Car',
         offer: urlOffer || 'Special Offer',
         festival: urlFestival || 'None',
-        city: urlCity || 'Any City'
+        city: urlCity || 'Any City',
       });
       if (res && res.data) {
         setUrlGeneratedImage(res.data.image);
@@ -300,28 +401,50 @@ export default function CreatePost() {
         setPrompt(`${res.data.content.headline} - ${res.data.content.cta}`);
         addToast({ type: 'success', title: 'Success', message: 'Creative generated from URL successfully!' });
       }
-    } catch (e) {
+    } catch {
       addToast({ type: 'error', title: 'Failed', message: 'Could not generate from URL' });
     } finally {
       setIsGeneratingImages(false);
     }
   };
 
+  // Caption variant tab click — changes caption only, NOT the design (M7 fix)
   const handleVariantSelect = (idx: number) => {
     setSelectedVariant(idx);
-    setCaption(variants?.captions[idx]?.caption_text ?? '');
+    const sourceCaptions =
+      toneActive === 'hindi' && hindiCaptions
+        ? hindiCaptions
+        : englishCaptions ?? variants?.captions;
+    setCaption(sourceCaptions?.[idx]?.caption_text ?? '');
   };
 
   const togglePlatform = (id: string) => {
-    setSelectedPlatforms((prev) => prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id]);
+    setSelectedPlatforms((prev) =>
+      prev.includes(id) ? prev.filter((p) => p !== id) : [...prev, id],
+    );
   };
 
   const handlePublishNow = async () => {
     if (!variants) return;
+
+    // Guard: ensure at least one selected platform has a connected account (C3)
+    const connectedSelected = selectedPlatforms.filter((p) => {
+      if (p === 'gmb') return connectedAccounts.includes('google');
+      return connectedAccounts.includes(p);
+    });
+    if (connectedSelected.length === 0) {
+      addToast({
+        type: 'error',
+        title: 'No accounts connected',
+        message: 'Connect Facebook or Google in the Accounts page before publishing.',
+      });
+      return;
+    }
+
     setIsPublishing(true);
     try {
       const cap = variants.captions[selectedVariant];
-      const cre = variants.creatives[selectedVariant];
+      const cre = variants.creatives[selectedDesign];
       const res = await postService.create({
         promptText: prompt,
         captionText: caption,
@@ -331,10 +454,11 @@ export default function CreatePost() {
       });
       await postService.publish(res.item.id, selectedPlatforms);
       setPublished(true);
+      localStorage.removeItem(DRAFT_STORAGE_KEY);
       addToast({ type: 'success', title: 'Post published!', message: 'Your post is live on selected platforms.' });
     } catch (err) {
       console.error(err);
-      addToast({ type: 'error', title: 'Publish failed', message: 'Could not publish. Please try again.' });
+      addToast({ type: 'error', title: 'Publish failed', message: 'Could not publish. Check platform connections and try again.' });
     } finally {
       setIsPublishing(false);
     }
@@ -345,7 +469,7 @@ export default function CreatePost() {
     setIsPublishing(true);
     try {
       const cap = variants.captions[selectedVariant];
-      const cre = variants.creatives[selectedVariant];
+      const cre = variants.creatives[selectedDesign];
       const res = await postService.create({
         promptText: prompt,
         captionText: caption,
@@ -356,6 +480,7 @@ export default function CreatePost() {
       await postService.schedule(res.item.id, selectedPlatforms, new Date(scheduleTime).toISOString());
       setShowScheduleModal(false);
       setPublished(true);
+      localStorage.removeItem(DRAFT_STORAGE_KEY);
       addToast({ type: 'success', title: 'Post scheduled!', message: 'Your post will be published at the selected time.' });
     } catch (err) {
       console.error(err);
@@ -407,7 +532,12 @@ export default function CreatePost() {
     }
   };
 
-  const currentVariant = variants ? variants.captions[selectedVariant] : null;
+  const currentVariant = variants ? (
+    toneActive === 'hindi' && hindiCaptions
+      ? hindiCaptions[selectedVariant]
+      : (englishCaptions ?? variants.captions)[selectedVariant]
+  ) : null;
+
   const charLimitMap: Record<string, number> = { google: 1500, facebook: 63206, instagram: 2200 };
   const charLimit = charLimitMap[activePlatformPreview] ?? 2200;
   const activeChips = PROMPT_CHIPS[activeCategory] ?? [];
@@ -442,7 +572,6 @@ export default function CreatePost() {
   if (isVideoMode) {
     return (
       <div className="h-full flex flex-col overflow-y-auto bg-[#f1f5f9]">
-        {/* Header */}
         <div className="flex items-center gap-3 px-5 py-3 bg-white border-b border-gray-200 shrink-0">
           <NavLink to="/" className="text-gray-400 hover:text-gray-700 transition-colors">
             <ArrowLeft className="w-4 h-4" />
@@ -457,7 +586,6 @@ export default function CreatePost() {
         </div>
 
         <div className="flex-1 p-5 md:p-7 max-w-2xl mx-auto w-full space-y-5">
-          {/* Intro card */}
           <div className="bg-gradient-to-br from-[#0f1117] to-[#1a1f2e] rounded-2xl p-6 text-white">
             <div className="flex items-start gap-4">
               <div className="w-12 h-12 rounded-xl bg-orange-500 flex items-center justify-center flex-shrink-0">
@@ -465,7 +593,7 @@ export default function CreatePost() {
               </div>
               <div>
                 <h2 className="text-lg font-bold">AI Video Generation</h2>
-                <p className="text-gray-400 text-sm mt-1">Create short-form videos for Reels and Stories directly from a text description. Our AI turns your concept into a ready-to-post automotive video.</p>
+                <p className="text-gray-400 text-sm mt-1">Create short-form videos for Reels and Stories directly from a text description.</p>
                 <div className="flex flex-wrap gap-2 mt-3">
                   {['Instagram Reels', 'Facebook Stories', 'YouTube Shorts'].map((p) => (
                     <span key={p} className="text-[11px] px-2.5 py-1 rounded-full bg-white/10 text-gray-300">{p}</span>
@@ -475,7 +603,6 @@ export default function CreatePost() {
             </div>
           </div>
 
-          {/* Form */}
           <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-5">
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Video Concept</label>
@@ -488,7 +615,6 @@ export default function CreatePost() {
               />
             </div>
 
-            {/* Optional image upload */}
             <div>
               <label className="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-2">Base Image (optional)</label>
               <input ref={videoImageRef} type="file" accept="image/*" className="hidden" onChange={handleVideoImageUpload} />
@@ -543,20 +669,13 @@ export default function CreatePost() {
               disabled={!videoPrompt.trim() || generatingVideo}
               className="w-full py-3 rounded-xl bg-orange-500 hover:bg-orange-600 text-white font-semibold text-sm flex items-center justify-center gap-2 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {generatingVideo ? (
-                <><RefreshCw className="w-4 h-4 animate-spin" /> Generating video… ({videoDuration}s)</>
-              ) : (
-                <><Wand2 className="w-4 h-4" /> Generate Video</>
-              )}
+              {generatingVideo
+                ? <><RefreshCw className="w-4 h-4 animate-spin" /> Generating video… ({videoDuration}s)</>
+                : <><Wand2 className="w-4 h-4" /> Generate Video</>
+              }
             </button>
-            {generatingVideo && (
-              <p className="text-xs text-center text-gray-400">
-                FFmpeg is rendering your video — usually takes {Math.round(videoDuration * 1.5)}–{Math.round(videoDuration * 3)}s
-              </p>
-            )}
           </div>
 
-          {/* Generated video player */}
           {videoUrl && (
             <div className="bg-white rounded-2xl border border-green-100 shadow-sm overflow-hidden">
               <div className="px-5 py-3 border-b border-gray-50 flex items-center justify-between">
@@ -564,21 +683,13 @@ export default function CreatePost() {
                   <div className="w-2 h-2 rounded-full bg-green-500" />
                   <span className="text-sm font-semibold text-gray-800">Video Ready — {videoDuration}s · {videoAspect}</span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <a
-                    href={videoUrl}
-                    download={`socialgenie-video-${Date.now()}.mp4`}
-                    className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 px-3 py-1.5 rounded-lg border border-blue-200 hover:bg-blue-50 transition-colors"
-                  >
-                    <Download className="w-3.5 h-3.5" /> Download
-                  </a>
-                  <button
-                    onClick={() => { setVideoUrl(null); setVideoJobId(null); }}
-                    className="text-xs text-gray-400 hover:text-gray-600 px-3 py-1.5 rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
-                  >
-                    New Video
-                  </button>
-                </div>
+                <a
+                  href={videoUrl}
+                  download={`socialgenie-video-${Date.now()}.mp4`}
+                  className="flex items-center gap-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 px-3 py-1.5 rounded-lg border border-blue-200 hover:bg-blue-50 transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" /> Download
+                </a>
               </div>
               <div className="flex justify-center bg-black p-4">
                 <video
@@ -589,25 +700,9 @@ export default function CreatePost() {
                   className={`max-h-[480px] rounded-lg ${videoAspect === '9:16' ? 'max-w-[270px]' : videoAspect === '1:1' ? 'max-w-[480px]' : 'w-full'}`}
                 />
               </div>
-              <div className="px-5 py-4 bg-gray-50 border-t">
-                <p className="text-xs text-gray-500 font-medium mb-2">Share to</p>
-                <div className="flex gap-2">
-                  {[
-                    { label: 'Instagram Reels', color: 'bg-pink-500' },
-                    { label: 'Facebook Story', color: 'bg-blue-600' },
-                    { label: 'WhatsApp Status', color: 'bg-green-500' },
-                  ].map((p) => (
-                    <button key={p.label} className={`${p.color} text-white text-xs font-medium px-3 py-1.5 rounded-lg hover:opacity-90 transition-opacity`}>
-                      {p.label}
-                    </button>
-                  ))}
-                </div>
-                <p className="text-[11px] text-gray-400 mt-2">Connect Facebook/Instagram in Settings → Platforms to publish directly</p>
-              </div>
             </div>
           )}
 
-          {/* Queued state (fallback if no video_url returned) */}
           {videoJobId && !videoUrl && (
             <div className="bg-white rounded-2xl border border-orange-100 shadow-sm p-6 text-center space-y-3">
               <div className="w-12 h-12 rounded-full bg-orange-100 flex items-center justify-center mx-auto">
@@ -615,32 +710,8 @@ export default function CreatePost() {
               </div>
               <h3 className="font-semibold text-gray-800">Video queued</h3>
               <p className="text-xs text-gray-400 font-mono bg-gray-50 px-3 py-1.5 rounded-lg">Job ID: {videoJobId}</p>
-              <button onClick={() => setVideoJobId(null)} className="text-sm text-orange-600 hover:text-orange-700 font-medium">
-                Generate another
-              </button>
             </div>
           )}
-
-          {/* Inspiration chips */}
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
-            <p className="text-xs font-bold text-gray-500 uppercase tracking-widest mb-3">Video Ideas for Indian Dealers</p>
-            <div className="space-y-2">
-              {[
-                'Festive Diwali offer video — new Creta with fireworks + ₹50,000 discount in 15 seconds',
-                'Customer delivery celebration — handover moment, family joy, showroom branding',
-                'New model arrival teaser — cinematic reveal of Nexon EV in showroom with dramatic lighting',
-                'Comparison video — Petrol vs EV for Indian family, dynamic cuts between both cars',
-              ].map((idea) => (
-                <button
-                  key={idea}
-                  onClick={() => setVideoPrompt(idea)}
-                  className="w-full text-left text-sm text-gray-600 px-3 py-2.5 rounded-lg bg-gray-50 hover:bg-orange-50 hover:text-orange-700 transition-colors border border-transparent hover:border-orange-200"
-                >
-                  {idea}
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
       </div>
     );
@@ -659,16 +730,14 @@ export default function CreatePost() {
         <span className="text-stone-900 text-sm font-semibold">Create Post</span>
         {variants && (
           <span className="ml-auto flex items-center gap-1.5 text-xs text-green-600 font-medium">
-            <span className="w-1.5 h-1.5 bg-green-500 rounded-full" /> Auto-saved
+            <span className="w-1.5 h-1.5 bg-green-500 rounded-full" /> Draft saved
           </span>
         )}
       </div>
 
       <div className="flex flex-1 overflow-hidden">
 
-        {/* ════════════════════════════════════════════════════════════════════
-            MAIN CONTENT — three stacked sections, scrollable (~85% width)
-        ════════════════════════════════════════════════════════════════════ */}
+        {/* ════ MAIN CONTENT ════ */}
         <div className="flex-1 overflow-y-auto p-8 space-y-6 min-w-0 max-w-5xl mx-auto">
 
           {/* ── SECTION 1: Describe your post ── */}
@@ -677,20 +746,20 @@ export default function CreatePost() {
               <h2 className="text-lg font-bold text-stone-900 mb-1">What exactly should be the post?</h2>
               <p className="text-sm text-stone-500">Describe your post in detail or choose a post type for ideas.</p>
             </div>
-            
+
             <div className="bg-stone-50 border-2 border-stone-200 rounded-2xl p-2 focus-within:border-orange-400 focus-within:bg-white transition-colors">
               <div className="flex items-center justify-between mb-2 px-3 pt-2">
-                 <select 
-                   className="bg-transparent text-sm font-bold text-stone-800 focus:outline-none cursor-pointer w-full md:w-auto"
-                   value={selectedPostType || ''}
-                   onChange={(e) => {
-                     const t = POST_TYPES.find(type => type.id === e.target.value);
-                     if (t) handleTypeSelect(t);
-                   }}
-                 >
-                   <option value="" disabled>✨ Select a post type...</option>
-                   {POST_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
-                 </select>
+                <select
+                  className="bg-transparent text-sm font-bold text-stone-800 focus:outline-none cursor-pointer w-full md:w-auto"
+                  value={selectedPostType || ''}
+                  onChange={(e) => {
+                    const t = POST_TYPES.find((type) => type.id === e.target.value);
+                    if (t) handleTypeSelect(t);
+                  }}
+                >
+                  <option value="" disabled>✨ Select a post type...</option>
+                  {POST_TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
+                </select>
               </div>
               <textarea
                 value={prompt}
@@ -709,7 +778,6 @@ export default function CreatePost() {
               </div>
             </div>
 
-            {/* Suggestion cards — shown when post type is selected */}
             {selectedPostType && activeChips.length > 0 && (
               <div className="pt-2">
                 <p className="text-[11px] font-extrabold text-stone-400 uppercase tracking-widest mb-3">Quick Suggestions</p>
@@ -741,12 +809,12 @@ export default function CreatePost() {
               </div>
               <span className="text-[10px] font-bold text-stone-400 uppercase tracking-widest bg-stone-100 px-2.5 py-1 rounded-full">Optional</span>
             </div>
-            
+
             <div className="flex flex-wrap p-4 gap-2 bg-stone-50/50 border-b border-stone-100">
               {([
-                { id: 'ai',          icon: Wand2,     label: 'Generate with AI', sub: 'Let AI design it'    },
-                { id: 'upload',      icon: ImagePlus, label: 'Upload Creative',  sub: 'Your own image/video' },
-                { id: 'url',         icon: Globe,     label: 'Auto-Scrape URL',  sub: 'Generate from Link'   },
+                { id: 'ai',     icon: Wand2,     label: 'Generate with AI', sub: 'Let AI design it' },
+                { id: 'upload', icon: ImagePlus,  label: 'Upload Creative',  sub: 'Your own image/video' },
+                { id: 'url',    icon: Globe,      label: 'Auto-Scrape URL',  sub: 'Generate from Link' },
               ] as const).map(({ id, icon: Icon, label, sub }) => (
                 <button
                   key={id}
@@ -765,8 +833,6 @@ export default function CreatePost() {
             </div>
 
             <div className="p-6">
-
-
               {/* Upload tab */}
               {mediaTab === 'upload' && (
                 <div className="max-w-2xl">
@@ -812,10 +878,16 @@ export default function CreatePost() {
                     <div className="flex flex-col sm:flex-row items-center gap-4">
                       <div className="flex-1">
                         <h4 className="text-sm font-bold text-stone-800 mb-1">Inspiration (Optional)</h4>
-                        <p className="text-xs text-stone-500">Have an image or reference you like? Paste it here or upload it to guide our AI.</p>
+                        <p className="text-xs text-stone-500">Have a reference image? Upload it to guide the AI design.</p>
                       </div>
                       <div className="flex-shrink-0 w-full sm:w-auto">
-                        <input ref={aiInspirationInputRef} type="file" accept="image/*" className="hidden" onChange={handleAiInspirationUpload} />
+                        <input
+                          ref={aiInspirationInputRef}
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={handleAiInspirationUpload}
+                        />
                         {inspirationImageUrl ? (
                           <div className="relative rounded-lg overflow-hidden border border-stone-200 group w-32 h-20">
                             <img src={inspirationImageUrl} alt="Inspiration" className="w-full h-full object-cover" />
@@ -824,8 +896,11 @@ export default function CreatePost() {
                             </button>
                           </div>
                         ) : (
-                          <button onClick={() => aiInspirationInputRef.current?.click()} disabled={isUploading}
-                            className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-white border border-stone-300 hover:border-orange-400 hover:text-orange-600 text-stone-600 text-xs font-semibold rounded-lg transition-colors">
+                          <button
+                            onClick={() => aiInspirationInputRef.current?.click()}
+                            disabled={isUploading}
+                            className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-white border border-stone-300 hover:border-orange-400 hover:text-orange-600 text-stone-600 text-xs font-semibold rounded-lg transition-colors disabled:opacity-40"
+                          >
                             <ImagePlus className="w-4 h-4" /> {isUploading ? 'Uploading…' : 'Upload or Paste'}
                           </button>
                         )}
@@ -839,13 +914,14 @@ export default function CreatePost() {
                         <Wand2 className="w-8 h-8 shrink-0 mt-1 text-orange-100" />
                         <div>
                           <h3 className="font-bold text-lg mb-1">Let AI design your post</h3>
-                          <p className="text-orange-100 text-sm mb-5">Click below to generate both the post content and 3 beautifully designed automotive creatives based on your description.</p>
+                          <p className="text-orange-100 text-sm mb-5">Click below to generate post content and 3 distinct automotive creatives based on your description.</p>
                           <button
                             onClick={() => handleGenerate(false)}
                             disabled={!prompt.trim()}
-                            className="bg-white text-orange-600 font-bold px-6 py-3 rounded-xl shadow-sm hover:shadow-md transition-all disabled:opacity-50 flex items-center gap-2"
+                            className="bg-white text-orange-600 font-bold px-6 py-3 rounded-xl shadow-sm hover:shadow-md transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                           >
-                            <Sparkles className="w-4 h-4" /> Generate Designs
+                            <Sparkles className="w-4 h-4" />
+                            {prompt.trim() ? 'Generate Designs' : 'Enter a description first'}
                           </button>
                         </div>
                       </div>
@@ -854,9 +930,13 @@ export default function CreatePost() {
                     <>
                       <div className="flex items-center justify-between">
                         <p className="text-sm font-bold text-stone-800">Choose a design</p>
-                        <button onClick={() => handleGenerate(true)}
-                          className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-orange-600 font-semibold transition-colors bg-stone-100 px-3 py-1.5 rounded-lg">
-                          <RefreshCw className={`w-4 h-4 ${isGeneratingImages ? 'animate-spin' : ''}`} /> Regenerate
+                        <button
+                          onClick={() => handleGenerate(true)}
+                          disabled={isGeneratingImages || isGenerating}
+                          className="flex items-center gap-1.5 text-sm text-stone-500 hover:text-orange-600 font-semibold transition-colors bg-stone-100 px-3 py-1.5 rounded-lg disabled:opacity-50"
+                        >
+                          <RefreshCw className={`w-4 h-4 ${isGeneratingImages || isGenerating ? 'animate-spin' : ''}`} />
+                          {isGeneratingImages ? 'Generating…' : 'Regenerate'}
                         </button>
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -864,9 +944,11 @@ export default function CreatePost() {
                           const aiImg = aiImageUrls[i] ?? null;
                           const loading = imageLoadingStates[i] ?? false;
                           return (
-                            <button key={i} onClick={() => handleVariantSelect(i)}
+                            <button
+                              key={i}
+                              onClick={() => setSelectedDesign(i)}   // design selection is independent of caption (M7)
                               className={`relative rounded-2xl overflow-hidden border-2 transition-all group ${
-                                selectedVariant === i ? 'border-orange-500 shadow-lg shadow-orange-100 scale-[1.02]' : 'border-stone-200 hover:border-stone-300'
+                                selectedDesign === i ? 'border-orange-500 shadow-lg shadow-orange-100 scale-[1.02]' : 'border-stone-200 hover:border-stone-300'
                               }`}
                             >
                               {aiImg ? (
@@ -883,7 +965,7 @@ export default function CreatePost() {
                                   </div>
                                 </div>
                               )}
-                              {selectedVariant === i && (
+                              {selectedDesign === i && (
                                 <div className="absolute top-3 right-3 w-6 h-6 bg-orange-500 rounded-full flex items-center justify-center shadow-md">
                                   <Check className="w-4 h-4 text-white" />
                                 </div>
@@ -904,11 +986,11 @@ export default function CreatePost() {
               {mediaTab === 'url' && (
                 <div className="space-y-4 max-w-2xl">
                   <div className="flex gap-2">
-                    <input 
-                      type="url" 
-                      value={sourceUrl} 
-                      onChange={(e) => setSourceUrl(e.target.value)} 
-                      placeholder="Enter dealer website URL (e.g. https://example.com/offer)" 
+                    <input
+                      type="url"
+                      value={sourceUrl}
+                      onChange={(e) => setSourceUrl(e.target.value)}
+                      placeholder="Enter dealer website URL (e.g. https://example.com/offer)"
                       className="flex-1 px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-orange-400 text-sm"
                     />
                   </div>
@@ -918,8 +1000,8 @@ export default function CreatePost() {
                     <input type="text" value={urlFestival} onChange={(e) => setUrlFestival(e.target.value)} placeholder="Festival (e.g. Diwali)" className="px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-orange-400 text-sm" />
                     <input type="text" value={urlCity} onChange={(e) => setUrlCity(e.target.value)} placeholder="City (e.g. Delhi)" className="px-4 py-3 bg-stone-50 border border-stone-200 rounded-xl focus:outline-none focus:border-orange-400 text-sm" />
                   </div>
-                  <button 
-                    onClick={handleGenerateFromUrl} 
+                  <button
+                    onClick={handleGenerateFromUrl}
                     disabled={!sourceUrl || isGeneratingImages}
                     className="w-full bg-stone-900 hover:bg-black disabled:opacity-50 text-white font-bold py-4 rounded-xl transition-colors flex justify-center items-center gap-2 shadow-sm"
                   >
@@ -958,51 +1040,60 @@ export default function CreatePost() {
             </button>
           )}
 
-          {/* ── SECTION 3: Caption — shown after generation ── */}
+          {/* ── SECTION 3: Caption ── */}
           {(variants || isGenerating) && (
             <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
-              <div className="px-6 py-5 border-b border-stone-100 flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <h2 className="text-lg font-bold text-stone-900">Caption</h2>
-                  <span className="flex items-center gap-1.5 text-xs bg-teal-100 text-teal-700 font-bold px-2.5 py-1 rounded-full">
-                    <Sparkles className="w-3 h-3" /> AI Generated
-                  </span>
-                </div>
-                {variants && (
-                  <div className="flex gap-1 bg-stone-100 p-1 rounded-xl">
-                    {(['hinglish', 'english', 'hindi'] as const).map((tone) => (
-                      <button key={tone} onClick={() => setToneActive(tone)}
-                        className={`text-xs font-semibold px-4 py-1.5 rounded-lg transition-colors ${
-                          toneActive === tone ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'
-                        }`}>
-                        {tone === 'hinglish' ? 'Hinglish' : tone === 'english' ? 'English' : 'हिंदी'}
-                      </button>
-                    ))}
+              <div className="px-6 py-5 border-b border-stone-100">
+                <div className="flex items-center justify-between flex-wrap gap-3">
+                  <div className="flex items-center gap-3">
+                    <h2 className="text-lg font-bold text-stone-900">Caption</h2>
+                    <span className="flex items-center gap-1.5 text-xs bg-teal-100 text-teal-700 font-bold px-2.5 py-1 rounded-full">
+                      <Sparkles className="w-3 h-3" /> AI Generated
+                    </span>
                   </div>
-                )}
+                  {variants && (
+                    <div className="flex gap-1 bg-stone-100 p-1 rounded-xl">
+                      {(['english', 'hinglish', 'hindi'] as const).map((tone) => (
+                        <button
+                          key={tone}
+                          onClick={() => handleToneChange(tone)}
+                          disabled={tone === 'hindi' && !hindiCaptions}
+                          className={`text-xs font-semibold px-4 py-1.5 rounded-lg transition-colors disabled:opacity-40 ${
+                            toneActive === tone ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'
+                          }`}
+                        >
+                          {tone === 'hinglish' ? 'Hinglish' : tone === 'english' ? 'English' : 'हिंदी'}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
 
               {isGenerating ? (
                 <div className="px-6 py-6 space-y-4 max-w-3xl">
                   <div className="flex gap-3">
-                    {[0,1,2].map(i => <div key={i} className="flex-1 h-10 bg-stone-100 rounded-xl animate-pulse" />)}
+                    {[0, 1, 2].map((i) => <div key={i} className="flex-1 h-10 bg-stone-100 rounded-xl animate-pulse" />)}
                   </div>
                   <div className="h-32 bg-stone-100 rounded-2xl animate-pulse" />
                   <div className="flex gap-2">
-                    {[0,1,2,3].map(i => <div key={i} className="h-8 w-24 bg-stone-100 rounded-full animate-pulse" />)}
+                    {[0, 1, 2, 3].map((i) => <div key={i} className="h-8 w-24 bg-stone-100 rounded-full animate-pulse" />)}
                   </div>
                 </div>
               ) : variants && (
                 <div className="px-6 py-6 space-y-5 max-w-3xl">
-                  {/* Style variant tabs */}
+                  {/* Caption style tabs — independent of design selection (M7) */}
                   <div className="flex gap-3">
                     {variants.captions.map((v, i) => (
-                      <button key={i} onClick={() => handleVariantSelect(i)}
+                      <button
+                        key={i}
+                        onClick={() => handleVariantSelect(i)}
                         className={`flex-1 py-3 px-4 rounded-xl text-sm font-bold border-2 transition-all ${
                           selectedVariant === i
                             ? 'bg-stone-900 text-white border-stone-900 shadow-md'
                             : 'bg-white text-stone-600 border-stone-200 hover:border-stone-300'
-                        }`}>
+                        }`}
+                      >
                         {v.style ? v.style.charAt(0).toUpperCase() + v.style.slice(1) : `Style ${i + 1}`}
                       </button>
                     ))}
@@ -1016,7 +1107,7 @@ export default function CreatePost() {
                       className="w-full h-40 p-5 border-2 border-stone-200 rounded-2xl text-sm text-stone-800 resize-none focus:outline-none focus:border-orange-400 leading-relaxed transition-colors bg-stone-50/50 focus:bg-white"
                       maxLength={charLimit}
                     />
-                    <div className="absolute bottom-3 right-4 flex justify-end text-xs text-stone-400 font-medium bg-white/80 px-2 py-0.5 rounded backdrop-blur-sm">
+                    <div className="absolute bottom-3 right-4 text-xs text-stone-400 font-medium bg-white/80 px-2 py-0.5 rounded backdrop-blur-sm">
                       <span className={caption.length > charLimit * 0.9 ? 'text-orange-500' : ''}>
                         {caption.length} / {charLimit}
                       </span>
@@ -1039,178 +1130,191 @@ export default function CreatePost() {
             </div>
           )}
 
-          {/* bottom padding */}
           <div className="h-8" />
         </div>
 
-        {/* ════════════════════════════════════════════════════════════════════
-            RIGHT PANEL — mobile phone preview + publish actions (~20% width)
-        ════════════════════════════════════════════════════════════════════ */}
-        {/* ════════════════════════════════════════════════════════════════════
-            RIGHT PANEL — sticky, wider phone preview + publish actions
-        ════════════════════════════════════════════════════════════════════ */}
+        {/* ════ RIGHT PANEL ════ */}
         <div className="w-96 shrink-0 border-l border-stone-200 bg-white overflow-y-auto">
           <div className="sticky top-0 flex flex-col items-center py-6 px-5 gap-5">
 
-          {/* Paste indicator */}
-          {isPasting && (
-            <div className="w-full bg-green-50 border-2 border-green-400 rounded-xl px-4 py-2 flex items-center gap-2 animate-pulse">
-              <Check className="w-4 h-4 text-green-600" />
-              <span className="text-sm font-bold text-green-700">Image pasted!</span>
-            </div>
-          )}
+            {isPasting && (
+              <div className="w-full bg-green-50 border-2 border-green-400 rounded-xl px-4 py-2 flex items-center gap-2 animate-pulse">
+                <Check className="w-4 h-4 text-green-600" />
+                <span className="text-sm font-bold text-green-700">Image pasted!</span>
+              </div>
+            )}
 
-          {/* Platform switcher — horizontal with icons */}
-          <div className="w-full">
-            <p className="text-xs font-extrabold text-stone-400 uppercase tracking-widest mb-2 text-center">Live Preview</p>
-            <div className="flex gap-1 bg-stone-100 p-1 rounded-xl">
-              {(['facebook', 'instagram', 'google'] as const).map((p) => (
-                <button key={p} onClick={() => setActivePlatformPreview(p)}
-                  className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg transition-all ${
-                    activePlatformPreview === p ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-400 hover:text-stone-600'
-                  }`}>
-                  {p === 'facebook' ? <FbIcon className="w-4 h-4" /> : p === 'instagram' ? <IgIcon className="w-4 h-4" /> : <Globe className="w-4 h-4" />}
-                </button>
-              ))}
+            {/* Platform preview switcher */}
+            <div className="w-full">
+              <p className="text-xs font-extrabold text-stone-400 uppercase tracking-widest mb-2 text-center">Live Preview</p>
+              <div className="flex gap-1 bg-stone-100 p-1 rounded-xl">
+                {(['facebook', 'instagram', 'google'] as const).map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setActivePlatformPreview(p)}
+                    className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg transition-all ${
+                      activePlatformPreview === p ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-400 hover:text-stone-600'
+                    }`}
+                  >
+                    {p === 'facebook' ? <FbIcon className="w-4 h-4" /> : p === 'instagram' ? <IgIcon className="w-4 h-4" /> : <Globe className="w-4 h-4" />}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
 
-          {/* Phone frame — 2x bigger */}
-          <div className="relative w-full max-w-[320px] shrink-0">
-            <div className="relative w-full bg-stone-900 rounded-[36px] p-1.5 shadow-2xl">
-              {/* Side buttons */}
-              <div className="absolute -left-1.5 top-24 w-1.5 h-12 bg-stone-700 rounded-l-full" />
-              <div className="absolute -left-1.5 top-44 w-1.5 h-10 bg-stone-700 rounded-l-full" />
-              <div className="absolute -right-1.5 top-28 w-1.5 h-14 bg-stone-700 rounded-r-full" />
-              
-              {/* Screen */}
-              <div className="bg-white rounded-[30px] overflow-hidden h-[580px] flex flex-col">
-                {/* Notch */}
-                <div className="flex justify-center pt-2 pb-1 bg-stone-900">
-                  <div className="w-24 h-6 bg-stone-900 rounded-b-2xl" />
-                </div>
-                {/* Status bar */}
-                <div className="bg-white px-5 py-1.5 flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-stone-800">9:41</span>
-                  <div className="flex items-center gap-1">
+            {/* Phone frame */}
+            <div className="relative w-full max-w-[320px] shrink-0">
+              <div className="relative w-full bg-stone-900 rounded-[36px] p-1.5 shadow-2xl">
+                <div className="absolute -left-1.5 top-24 w-1.5 h-12 bg-stone-700 rounded-l-full" />
+                <div className="absolute -left-1.5 top-44 w-1.5 h-10 bg-stone-700 rounded-l-full" />
+                <div className="absolute -right-1.5 top-28 w-1.5 h-14 bg-stone-700 rounded-r-full" />
+
+                <div className="bg-white rounded-[30px] overflow-hidden h-[580px] flex flex-col">
+                  <div className="flex justify-center pt-2 pb-1 bg-stone-900">
+                    <div className="w-24 h-6 bg-stone-900 rounded-b-2xl" />
+                  </div>
+                  <div className="bg-white px-5 py-1.5 flex items-center justify-between">
+                    <span className="text-[10px] font-bold text-stone-800">9:41</span>
                     <div className="w-4 h-2.5 border-[1.5px] border-stone-800 rounded-sm p-[0.5px]">
                       <div className="w-full h-full bg-stone-800 rounded-sm scale-x-75 origin-left" />
                     </div>
                   </div>
-                </div>
 
-                {/* Post content */}
-                <div className="bg-white flex-1 flex flex-col">
-                  {/* Post header */}
-                  <div className="flex items-center gap-2.5 px-4 py-2.5 border-b border-stone-100">
-                    <div className="w-9 h-9 bg-orange-600 rounded-full flex items-center justify-center shrink-0 shadow-inner">
-                      <span className="text-[10px] font-black text-white">RM</span>
-                    </div>
-                    <div>
-                      <p className="text-[12px] font-black text-stone-900 leading-none">Rajesh Motors</p>
-                      <p className="text-[9px] font-medium text-stone-400 leading-none mt-1">
-                        {activePlatformPreview === 'facebook' ? 'Facebook' : activePlatformPreview === 'instagram' ? 'Instagram' : 'Google Update'}
-                      </p>
-                    </div>
-                  </div>
-
-                  {/* Creative image */}
-                  <div className="w-full aspect-square bg-stone-100 overflow-hidden relative">
-                    {urlGeneratedImage && mediaTab === 'url' ? (
-                      <img src={urlGeneratedImage} alt="Generated" className="w-full h-full object-cover" />
-                    ) : aiImageUrls[selectedVariant] && mediaTab === 'ai' ? (
-                      <img src={aiImageUrls[selectedVariant]!} alt="Creative" className="w-full h-full object-cover" />
-                    ) : uploadedImageUrl && mediaTab === 'upload' ? (
-                      <img src={uploadedImageUrl} alt="Uploaded" className="w-full h-full object-cover" />
-                    ) : (isGeneratingImages || isGenerating) ? (
-                      <div className={`w-full h-full bg-gradient-to-br ${TEMPLATE_THEMES[Math.min(selectedVariant,2)]?.gradient ?? 'from-stone-900 to-stone-800'} flex items-center justify-center`}>
-                        <Sparkles className="w-8 h-8 text-white/60 animate-pulse" />
+                  <div className="bg-white flex-1 flex flex-col">
+                    {/* Post header — uses real dealer name (M5) */}
+                    <div className="flex items-center gap-2.5 px-4 py-2.5 border-b border-stone-100">
+                      <div className="w-9 h-9 bg-orange-600 rounded-full flex items-center justify-center shrink-0 shadow-inner">
+                        <span className="text-[10px] font-black text-white">{dealerInitials}</span>
                       </div>
-                    ) : prompt ? (
-                      <div className={`w-full h-full bg-gradient-to-br ${TEMPLATE_THEMES[Math.min(selectedVariant,2)]?.gradient ?? 'from-stone-900 to-stone-800'} flex flex-col items-center justify-center p-6`}>
-                        <p className="text-white text-[12px] font-bold text-center leading-snug">
-                          {prompt.slice(0, 60)}{prompt.length > 60 ? '…' : ''}
+                      <div>
+                        <p className="text-[12px] font-black text-stone-900 leading-none">{dealerDisplayName}</p>
+                        <p className="text-[9px] font-medium text-stone-400 leading-none mt-1">
+                          {activePlatformPreview === 'facebook'
+                            ? 'Facebook'
+                            : activePlatformPreview === 'instagram'
+                            ? 'Instagram'
+                            : 'Google Business Profile'}
                         </p>
                       </div>
-                    ) : (
-                      <div className="w-full h-full bg-stone-100 flex flex-col gap-2 items-center justify-center">
-                        <ImagePlus className="w-8 h-8 text-stone-300" />
-                      </div>
-                    )}
-                  </div>
+                    </div>
 
-                  {/* Caption */}
-                  <div className="px-4 py-3 flex-1">
-                    {caption ? (
-                      <p className="text-[10px] text-stone-700 leading-relaxed line-clamp-4 font-medium">{caption}</p>
-                    ) : (
-                      <div className="space-y-1.5 mt-1">
-                        <div className="h-2 bg-stone-200 rounded-full w-full" />
-                        <div className="h-2 bg-stone-200 rounded-full w-4/5" />
-                        <div className="h-2 bg-stone-200 rounded-full w-3/5" />
-                      </div>
-                    )}
-                  </div>
+                    {/* Creative image */}
+                    <div className="w-full aspect-square bg-stone-100 overflow-hidden relative">
+                      {urlGeneratedImage && mediaTab === 'url' ? (
+                        <img src={urlGeneratedImage} alt="Generated" className="w-full h-full object-cover" />
+                      ) : aiImageUrls[selectedDesign] && mediaTab === 'ai' ? (
+                        <img src={aiImageUrls[selectedDesign]!} alt="Creative" className="w-full h-full object-cover" />
+                      ) : uploadedImageUrl && mediaTab === 'upload' ? (
+                        <img src={uploadedImageUrl} alt="Uploaded" className="w-full h-full object-cover" />
+                      ) : (isGeneratingImages || isGenerating) ? (
+                        <div className={`w-full h-full bg-gradient-to-br ${TEMPLATE_THEMES[Math.min(selectedDesign, 2)]?.gradient ?? 'from-stone-900 to-stone-800'} flex items-center justify-center`}>
+                          <Sparkles className="w-8 h-8 text-white/60 animate-pulse" />
+                        </div>
+                      ) : prompt ? (
+                        <div className={`w-full h-full bg-gradient-to-br ${TEMPLATE_THEMES[Math.min(selectedDesign, 2)]?.gradient ?? 'from-stone-900 to-stone-800'} flex flex-col items-center justify-center p-6`}>
+                          <p className="text-white text-[12px] font-bold text-center leading-snug">
+                            {prompt.slice(0, 60)}{prompt.length > 60 ? '…' : ''}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="w-full h-full bg-stone-100 flex flex-col gap-2 items-center justify-center">
+                          <ImagePlus className="w-8 h-8 text-stone-300" />
+                        </div>
+                      )}
+                    </div>
 
-                  {/* Action bar */}
-                  <div className="flex items-center gap-4 px-4 py-2.5 border-t border-stone-100 mt-auto">
-                    {activePlatformPreview === 'instagram' ? (
-                      <><span className="text-[14px]">♡</span><span className="text-[14px]">💬</span><span className="text-[14px]">↗</span></>
-                    ) : (
-                      <><span className="text-[10px] font-semibold text-stone-500">👍 Like</span><span className="text-[10px] font-semibold text-stone-500">💬 Comment</span><span className="text-[10px] font-semibold text-stone-500">↗ Share</span></>
-                    )}
-                  </div>
+                    {/* Caption */}
+                    <div className="px-4 py-3 flex-1">
+                      {caption ? (
+                        <p className="text-[10px] text-stone-700 leading-relaxed line-clamp-4 font-medium">{caption}</p>
+                      ) : (
+                        <div className="space-y-1.5 mt-1">
+                          <div className="h-2 bg-stone-200 rounded-full w-full" />
+                          <div className="h-2 bg-stone-200 rounded-full w-4/5" />
+                          <div className="h-2 bg-stone-200 rounded-full w-3/5" />
+                        </div>
+                      )}
+                    </div>
 
-                  {/* Home bar */}
-                  <div className="flex justify-center py-2.5 pb-3 bg-stone-50">
-                    <div className="w-20 h-1 bg-stone-300 rounded-full" />
+                    {/* Action bar */}
+                    <div className="flex items-center gap-4 px-4 py-2.5 border-t border-stone-100 mt-auto">
+                      {activePlatformPreview === 'instagram' ? (
+                        <><span className="text-[14px]">♡</span><span className="text-[14px]">💬</span><span className="text-[14px]">↗</span></>
+                      ) : (
+                        <><span className="text-[10px] font-semibold text-stone-500">👍 Like</span><span className="text-[10px] font-semibold text-stone-500">💬 Comment</span><span className="text-[10px] font-semibold text-stone-500">↗ Share</span></>
+                      )}
+                    </div>
+
+                    <div className="flex justify-center py-2.5 pb-3 bg-stone-50">
+                      <div className="w-20 h-1 bg-stone-300 rounded-full" />
+                    </div>
                   </div>
                 </div>
               </div>
             </div>
-          </div>
 
-          {/* Publish to platforms — horizontal icon toggles */}
-          <div className="w-full space-y-2">
-            <p className="text-xs font-extrabold text-stone-400 uppercase tracking-widest text-center">Platforms</p>
-            <div className="flex gap-2">
-              {PLATFORMS.map(({ id, icon: Icon, color, dot }) => (
-                <button key={id} onClick={() => togglePlatform(id)}
-                  className={`flex-1 flex flex-col items-center gap-1.5 py-3 rounded-xl border-2 transition-all ${
-                    selectedPlatforms.includes(id)
-                      ? 'border-stone-300 bg-stone-50 shadow-sm'
-                      : 'border-stone-100 opacity-50 hover:opacity-100 hover:border-stone-200'
-                  }`}
-                >
-                  <Icon className={`w-5 h-5 ${color} shrink-0`} />
-                  {selectedPlatforms.includes(id) && <div className={`w-2 h-2 rounded-full shadow-sm ${dot}`} />}
+            {/* Platform toggles */}
+            <div className="w-full space-y-2">
+              <p className="text-xs font-extrabold text-stone-400 uppercase tracking-widest text-center">Platforms</p>
+              <div className="flex gap-2">
+                {PLATFORMS.map(({ id, icon: Icon, color, dot }) => {
+                  const isConnected = connectedAccounts.includes(id === 'gmb' ? 'google' : id);
+                  return (
+                    <button
+                      key={id}
+                      onClick={() => togglePlatform(id)}
+                      className={`flex-1 flex flex-col items-center gap-1.5 py-3 rounded-xl border-2 transition-all ${
+                        selectedPlatforms.includes(id)
+                          ? 'border-stone-300 bg-stone-50 shadow-sm'
+                          : 'border-stone-100 opacity-50 hover:opacity-100 hover:border-stone-200'
+                      }`}
+                    >
+                      <Icon className={`w-5 h-5 ${color} shrink-0`} />
+                      {selectedPlatforms.includes(id) && (
+                        <div className={`w-2 h-2 rounded-full shadow-sm ${isConnected ? dot : 'bg-stone-300'}`} />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              {/* Show warning if no selected platform has a connected account */}
+              {selectedPlatforms.length > 0 && !selectedPlatforms.some((p) => connectedAccounts.includes(p === 'gmb' ? 'google' : p)) && (
+                <p className="text-[11px] text-amber-600 text-center font-medium bg-amber-50 rounded-lg px-2 py-1.5">
+                  No connected accounts — <NavLink to="/accounts" className="underline font-bold">Connect now</NavLink>
+                </p>
+              )}
+            </div>
+
+            <div className="w-full border-t-2 border-stone-100 border-dashed" />
+
+            {/* Publish actions */}
+            <div className="w-full space-y-2.5">
+              <button
+                onClick={handlePublishNow}
+                disabled={isPublishing || selectedPlatforms.length === 0 || !variants}
+                className="w-full flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold py-3.5 rounded-xl transition-colors shadow-md shadow-orange-200"
+              >
+                {isPublishing
+                  ? <><RefreshCw className="w-4 h-4 animate-spin" /> Publishing…</>
+                  : <><Send className="w-4 h-4" /> Post Everywhere</>
+                }
+              </button>
+              <button
+                onClick={() => setShowScheduleModal(true)}
+                disabled={selectedPlatforms.length === 0 || !variants}
+                className="w-full flex items-center justify-center gap-2 text-stone-700 text-sm font-bold border-2 border-stone-200 py-3 rounded-xl hover:bg-stone-50 hover:border-stone-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                <Calendar className="w-4 h-4" /> Schedule Post
+              </button>
+              <div className="flex gap-2">
+                <button disabled={!variants} className="flex-1 flex items-center justify-center gap-2 text-stone-600 text-xs font-bold border-2 border-stone-200 py-2.5 rounded-xl hover:bg-stone-50 disabled:opacity-50 transition-colors">
+                  <Download className="w-3.5 h-3.5" /> Save
                 </button>
-              ))}
+                <button disabled={!variants} className="flex-1 flex items-center justify-center gap-2 text-yellow-700 text-xs font-bold border-2 border-yellow-200 bg-yellow-50 py-2.5 rounded-xl hover:bg-yellow-100 disabled:opacity-50 transition-colors">
+                  <Zap className="w-3.5 h-3.5" /> Boost
+                </button>
+              </div>
             </div>
-          </div>
-
-          {/* Divider */}
-          <div className="w-full border-t-2 border-stone-100 border-dashed" />
-
-          {/* Publish actions */}
-          <div className="w-full space-y-2.5">
-            <button onClick={handlePublishNow} disabled={isPublishing || selectedPlatforms.length === 0 || !variants}
-              className="w-full flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-bold py-3.5 rounded-xl transition-colors shadow-md shadow-orange-200">
-              {isPublishing ? <><RefreshCw className="w-4 h-4 animate-spin" /> Publishing…</> : <><Send className="w-4 h-4" /> Post Everywhere</>}
-            </button>
-            <button onClick={() => setShowScheduleModal(true)} disabled={selectedPlatforms.length === 0 || !variants}
-              className="w-full flex items-center justify-center gap-2 text-stone-700 text-sm font-bold border-2 border-stone-200 py-3 rounded-xl hover:bg-stone-50 hover:border-stone-300 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
-              <Calendar className="w-4 h-4" /> Schedule Post
-            </button>
-            <div className="flex gap-2">
-              <button disabled={!variants} className="flex-1 flex items-center justify-center gap-2 text-stone-600 text-xs font-bold border-2 border-stone-200 py-2.5 rounded-xl hover:bg-stone-50 disabled:opacity-50 transition-colors">
-                <Download className="w-3.5 h-3.5" /> Save
-              </button>
-              <button disabled={!variants} className="flex-1 flex items-center justify-center gap-2 text-yellow-700 text-xs font-bold border-2 border-yellow-200 bg-yellow-50 py-2.5 rounded-xl hover:bg-yellow-100 disabled:opacity-50 transition-colors">
-                <Zap className="w-3.5 h-3.5" /> Boost
-              </button>
-            </div>
-          </div>
           </div>
         </div>
       </div>
@@ -1222,21 +1326,28 @@ export default function CreatePost() {
             <h3 className="text-lg font-extrabold text-stone-900">Schedule Post</h3>
             <div>
               <label className="block text-sm font-semibold text-stone-700 mb-1">Date &amp; Time</label>
-              <input type="datetime-local"
+              <input
+                type="datetime-local"
                 className="w-full border border-stone-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-orange-400 focus:outline-none"
-                value={scheduleTime} onChange={(e) => setScheduleTime(e.target.value)}
+                value={scheduleTime}
+                onChange={(e) => setScheduleTime(e.target.value)}
               />
             </div>
             <div className="bg-orange-50 border border-orange-100 rounded-xl p-3 text-xs text-orange-700">
               <strong>Best time:</strong> Tomorrow, 9:00 AM — based on your audience engagement patterns
             </div>
             <div className="flex gap-3">
-              <button onClick={() => setShowScheduleModal(false)}
-                className="flex-1 py-2.5 text-sm font-semibold text-stone-700 border border-stone-200 rounded-xl hover:bg-stone-50 transition-colors">
+              <button
+                onClick={() => setShowScheduleModal(false)}
+                className="flex-1 py-2.5 text-sm font-semibold text-stone-700 border border-stone-200 rounded-xl hover:bg-stone-50 transition-colors"
+              >
                 Cancel
               </button>
-              <button onClick={confirmSchedule} disabled={isPublishing || !scheduleTime}
-                className="flex-1 py-2.5 text-sm font-bold bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white rounded-xl transition-colors">
+              <button
+                onClick={confirmSchedule}
+                disabled={isPublishing || !scheduleTime}
+                className="flex-1 py-2.5 text-sm font-bold bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white rounded-xl transition-colors"
+              >
                 {isPublishing ? 'Scheduling…' : 'Confirm'}
               </button>
             </div>

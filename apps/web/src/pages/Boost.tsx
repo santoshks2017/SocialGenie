@@ -21,12 +21,6 @@ interface Campaign {
   platform: string;
 }
 
-const MOCK_CAMPAIGNS: Campaign[] = [
-  { id: '1', postTitle: 'Brezza Weekend Offer', postThumbnail: 'from-blue-900 to-blue-700', dailyBudget: 1000, totalBudget: 7000, spent: 3200, reach: 14821, clicks: 312, ctr: '2.1%', daysLeft: 4, status: 'active', platform: 'Facebook + Instagram' },
-  { id: '2', postTitle: 'Navratri Special Deals', postThumbnail: 'from-orange-600 to-red-500', dailyBudget: 2500, totalBudget: 17500, spent: 5000, reach: 22100, clicks: 541, ctr: '2.4%', daysLeft: 7, status: 'active', platform: 'Facebook' },
-  { id: '3', postTitle: 'Nexon EV Showcase', postThumbnail: 'from-teal-700 to-teal-500', dailyBudget: 500, totalBudget: 3500, spent: 3500, reach: 9400, clicks: 187, ctr: '2.0%', daysLeft: 0, status: 'completed', platform: 'Instagram' },
-  { id: '4', postTitle: 'Service Camp August', postThumbnail: 'from-gray-700 to-gray-500', dailyBudget: 1000, totalBudget: 5000, spent: 1500, reach: 5200, clicks: 98, ctr: '1.9%', daysLeft: 2, status: 'paused', platform: 'Facebook' },
-];
 
 const STATUS_STYLES: Record<CampaignStatus, string> = {
   active: 'bg-green-100 text-green-700',
@@ -276,14 +270,13 @@ function BoostSetupModal({ onClose, onLaunch }: BoostModalProps) {
 }
 
 export default function BoostPage() {
-  const [campaigns, setCampaigns] = useState<Campaign[]>(MOCK_CAMPAIGNS);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [showBoostModal, setShowBoostModal] = useState(false);
   const [launched, setLaunched] = useState(false);
   const [activeTab, setActiveTab] = useState<'active' | 'completed'>('active');
 
   useEffect(() => {
     boostService.list({ pageSize: 50 }).then((res) => {
-      if (res.items.length === 0) return;
       const mapped: Campaign[] = res.items.map((item) => {
         const totalBudget = item.dailyBudget * item.durationDays;
         const endDate = item.endDate ? new Date(item.endDate) : null;

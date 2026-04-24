@@ -23,39 +23,6 @@ interface Message {
   rating?: number;
 }
 
-const MOCK_MESSAGES: Message[] = [
-  {
-    id: '1', platform: 'google', type: 'review', customerName: 'Priya Sharma', customerInitials: 'PS',
-    text: 'Excellent service at Rajesh Motors! Got my new Brezza delivered on time. Amit from the sales team was very helpful throughout the process.',
-    timestamp: '2h ago', sentiment: 'positive', tag: 'general', isRead: false, rating: 5,
-    suggestedReply: 'Thank you so much, Priya! We\'re thrilled to hear about your wonderful experience at Rajesh Motors. Amit and the entire team truly appreciate your kind words — it means a lot to us! We\'re so glad your Brezza delivery was smooth and memorable. Enjoy every ride, and don\'t hesitate to reach out for any after-sales needs. 🚗',
-  },
-  {
-    id: '2', platform: 'google', type: 'review', customerName: 'Vikram Patel', customerInitials: 'VP',
-    text: 'Waited 45 minutes for service even with an appointment. The staff was rude when I asked for an update. Very disappointing experience.',
-    timestamp: '5h ago', sentiment: 'negative', tag: 'complaint', isRead: false, rating: 2,
-    suggestedReply: 'Dear Vikram, we sincerely apologise for the delay and the service experience you had. This is not the standard we hold ourselves to. Our service manager will personally reach out within the next hour to understand what went wrong and make it right for you. Your trust matters to us.',
-  },
-  {
-    id: '3', platform: 'facebook', type: 'comment', customerName: 'Ankit Dubey', customerInitials: 'AD',
-    text: 'What\'s the on-road price for Baleno in Mumbai? Interested in the Zeta variant.',
-    timestamp: '8h ago', sentiment: 'positive', tag: 'lead', isRead: true,
-    postContext: 'Maruti Baleno New Arrival post',
-    suggestedReply: 'Hi Ankit! The Baleno Zeta on-road price in Mumbai starts from approx ₹9.5 Lakhs (ex-showroom ₹8.2L + insurance + registration). DM us or call +91 98765 43210 for an exact quote and to book your test drive this weekend! 🚗',
-  },
-  {
-    id: '4', platform: 'instagram', type: 'comment', customerName: 'Neha Gupta', customerInitials: 'NG',
-    text: 'Love this! Just got my Swift from Rajesh Motors last week. Best car buying experience ever! 😍',
-    timestamp: '12h ago', sentiment: 'positive', tag: 'general', isRead: true,
-    suggestedReply: 'Thank you so much, Neha! We\'re overjoyed to hear this. Enjoy every drive in your new Swift — it\'s a wonderful car! Do share your experience on Google Reviews too. Happy to help with any service needs. 🌟',
-  },
-  {
-    id: '5', platform: 'google', type: 'review', customerName: 'Suresh Kumar', customerInitials: 'SK',
-    text: 'Good showroom with nice staff. The test drive experience was great. Bought a Creta and very happy with the purchase.',
-    timestamp: '1d ago', sentiment: 'positive', tag: 'general', isRead: true, rating: 4,
-    suggestedReply: 'Thank you, Suresh! We\'re thrilled you\'re enjoying your new Creta — it\'s a fantastic choice! The entire team at Rajesh Motors is grateful for your trust. Do reach out anytime for service or support. Happy driving! 🚗',
-  },
-];
 
 const PLATFORM_STYLES: Record<Platform, { label: string; color: string; bg: string }> = {
   facebook: { label: 'Facebook', color: 'text-blue-700', bg: 'bg-blue-50' },
@@ -254,7 +221,7 @@ function ReviewCard({
 
 // ─── InboxPage (Reviews Hub) ──────────────────────────────────────────────────
 export default function InboxPage() {
-  const [messages, setMessages] = useState(MOCK_MESSAGES);
+  const [messages, setMessages] = useState<Message[]>([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState<'all' | Platform>('all');
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set(['1']));
@@ -264,7 +231,6 @@ export default function InboxPage() {
 
   useEffect(() => {
     inboxService.list({ pageSize: 50 }).then((res) => {
-      if (res.items.length === 0) return;
       const mapped: Message[] = res.items.map((item) => ({
         id: item.id,
         platform: item.platform as Platform,
@@ -409,7 +375,13 @@ export default function InboxPage() {
           </div>
 
           {/* Review cards */}
-          {filtered.length === 0 ? (
+          {messages.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-stone-200 p-12 text-center shadow-sm">
+              <MessageSquare className="w-10 h-10 text-stone-300 mx-auto mb-3" />
+              <p className="text-stone-500 font-medium">No messages yet</p>
+              <p className="text-stone-400 text-sm mt-1 max-w-sm mx-auto">Connect your Facebook, Instagram, and Google Business Profile in Accounts to receive customer reviews and comments here.</p>
+            </div>
+          ) : filtered.length === 0 ? (
             <div className="bg-white rounded-2xl border border-stone-200 p-12 text-center shadow-sm">
               <MessageSquare className="w-10 h-10 text-stone-300 mx-auto mb-3" />
               <p className="text-stone-500 font-medium">No reviews found</p>

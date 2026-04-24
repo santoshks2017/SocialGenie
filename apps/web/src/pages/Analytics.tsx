@@ -5,69 +5,6 @@ import api from '../services/api';
 import { postService, type Post } from '../services/creative';
 import { boostService } from '../services/boost';
 
-const WEEKLY_LEADS = [12, 18, 14, 22, 19, 31, 28];
-const WEEK_LABELS = ['Week 1', 'Week 2', 'Week 3', 'Week 4', 'Week 5', 'Week 6', 'Week 7 (now)'];
-
-const LEAD_SOURCES = [
-  { source: 'Facebook', leads: 63, color: 'bg-blue-500', pct: 38 },
-  { source: 'Instagram', leads: 41, color: 'bg-pink-500', pct: 25 },
-  { source: 'Google', leads: 28, color: 'bg-green-500', pct: 17 },
-  { source: 'WhatsApp', leads: 22, color: 'bg-emerald-500', pct: 13 },
-  { source: 'Organic', leads: 12, color: 'bg-gray-400', pct: 7 },
-];
-
-
-const maxLeads = Math.max(...WEEKLY_LEADS);
-
-function MiniBarChart() {
-  return (
-    <div className="flex items-end gap-1.5 h-24">
-      {WEEKLY_LEADS.map((val, i) => (
-        <div key={i} className="flex-1 flex flex-col items-center gap-1">
-          <div
-            className={`w-full rounded-t transition-all ${i === WEEKLY_LEADS.length - 1 ? 'bg-blue-600' : 'bg-blue-200'}`}
-            style={{ height: `${(val / maxLeads) * 80}px` }}
-          />
-          <span className="text-[9px] text-gray-400 writing-mode-vertical">{val}</span>
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function DonutChart() {
-  let cumulative = 0;
-  const r = 40;
-  const cx = 56;
-  const cy = 56;
-  const circumference = 2 * Math.PI * r;
-
-  return (
-    <svg width={112} height={112} viewBox="0 0 112 112">
-      <circle cx={cx} cy={cy} r={r} fill="none" stroke="#f3f4f6" strokeWidth={16} />
-      {LEAD_SOURCES.map((src, i) => {
-        const colors = ['#3b82f6','#ec4899','#22c55e','#10b981','#9ca3af'];
-        const strokeDasharray = (src.pct / 100) * circumference;
-        const strokeDashoffset = -cumulative * circumference / 100;
-        cumulative += src.pct;
-        return (
-          <circle
-            key={i}
-            cx={cx} cy={cy} r={r}
-            fill="none"
-            stroke={colors[i]}
-            strokeWidth={16}
-            strokeDasharray={`${strokeDasharray} ${circumference - strokeDasharray}`}
-            strokeDashoffset={circumference / 4 + strokeDashoffset}
-            transform={`rotate(-90 ${cx} ${cy})`}
-          />
-        );
-      })}
-      <text x={cx} y={cy - 4} textAnchor="middle" className="text-xs font-bold" fill="#111827" fontSize={14} fontWeight="bold">166</text>
-      <text x={cx} y={cy + 10} textAnchor="middle" fill="#6b7280" fontSize={8}>leads</text>
-    </svg>
-  );
-}
 
 interface DashboardStats {
   postsThisMonth: number;
@@ -157,31 +94,15 @@ export default function AnalyticsPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
         {/* Weekly trend */}
-        <div className="md:col-span-2 bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <h3 className="font-semibold text-gray-800 mb-4">Weekly Lead Trend</h3>
-          <MiniBarChart />
-          <div className="flex justify-between mt-2">
-            {WEEK_LABELS.map((l, i) => (
-              <span key={i} className="text-[9px] text-gray-400 flex-1 text-center">{l.replace('Week ', 'Wk')}</span>
-            ))}
-          </div>
+        <div className="md:col-span-2 bg-white rounded-xl border border-gray-100 shadow-sm p-5 flex flex-col items-center justify-center min-h-[160px]">
+          <h3 className="font-semibold text-gray-800 mb-3 w-full">Weekly Lead Trend</h3>
+          <p className="text-sm text-gray-400 text-center">Weekly trend data will appear here as your posts generate leads over time.</p>
         </div>
 
         {/* Leads by source */}
-        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
-          <h3 className="font-semibold text-gray-800 mb-4">Leads by Source</h3>
-          <div className="flex items-center gap-4">
-            <DonutChart />
-            <div className="space-y-2 flex-1">
-              {LEAD_SOURCES.map((s) => (
-                <div key={s.source} className="flex items-center gap-2">
-                  <div className={`w-2.5 h-2.5 rounded-sm ${s.color} flex-shrink-0`} />
-                  <span className="text-xs text-gray-600 flex-1">{s.source}</span>
-                  <span className="text-xs font-semibold text-gray-800">{s.leads}</span>
-                </div>
-              ))}
-            </div>
-          </div>
+        <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-5 flex flex-col items-center justify-center min-h-[160px]">
+          <h3 className="font-semibold text-gray-800 mb-3 w-full">Leads by Source</h3>
+          <p className="text-sm text-gray-400 text-center">Platform breakdown will populate once leads are attributed to your connected accounts.</p>
         </div>
       </div>
 
