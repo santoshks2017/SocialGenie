@@ -17,7 +17,6 @@ import InventoryPage from './pages/Inventory';
 import BoostPage from './pages/Boost';
 import AnalyticsPage from './pages/Analytics';
 import SettingsPage from './pages/SettingsPage';
-import LoginPage from './pages/LoginPage';
 import AuthCallbackPage from './pages/AuthCallbackPage';
 import ConnectProfilesPage from './pages/ConnectProfilesPage';
 import type { UserInfo } from './lib/permissions';
@@ -543,13 +542,6 @@ function AppRoutes() {
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
-}
-
-// Redirect logged-in users away from /login
-function LoginPublicRoute({ children }: { children: React.ReactNode }) {
-  const { user, token } = useAuth();
-  if (user && token) return <Navigate to="/" replace />;
-  return <>{children}</>;
 }
 
 export default function App() {
