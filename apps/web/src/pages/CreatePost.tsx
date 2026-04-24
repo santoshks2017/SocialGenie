@@ -94,13 +94,15 @@ export default function CreatePost() {
   const [uploadedVideoName, setUploadedVideoName] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [toneActive, setToneActive] = useState<'hinglish' | 'english' | 'hindi'>('hinglish');
-  const [mediaTab, setMediaTab] = useState<'inspiration' | 'upload' | 'ai'>('upload');
-  const [inspirationUrl, setInspirationUrl] = useState('');
+  const [mediaTab, setMediaTab] = useState<'upload' | 'ai'>('ai');
+  const [inspirationImageId, setInspirationImageId] = useState<string | null>(null);
+  const [inspirationImageUrl, setInspirationImageUrl] = useState<string | null>(null);
   const [aiImageUrls, setAiImageUrls] = useState<(string | null)[]>([null, null, null]);
   const [isGeneratingImages, setIsGeneratingImages] = useState(false);
   const [imageLoadingStates, setImageLoadingStates] = useState<boolean[]>([false, false, false]);
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
+  const aiInspirationInputRef = useRef<HTMLInputElement>(null);
   const { addToast } = useToast();
 
   // AI Video mode
@@ -126,22 +128,71 @@ export default function CreatePost() {
     if (type.starter && !prompt.trim()) setPrompt(type.starter);
   };
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  const uploadFileAPI = async (file: File) => {
     setIsUploading(true);
     try {
-      const res = await creativeService.uploadImage(file);
+      return await creativeService.uploadImage(file);
+    } catch {
+      addToast({ type: 'error', title: 'Upload failed', message: 'Image upload failed. Try again.' });
+      return null;
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleImageUploadEvent = async (file: File) => {
+    const res = await uploadFileAPI(file);
+    if (res) {
       setUploadedImageId(res.id);
       setUploadedImageUrl(res.url);
       setUploadedVideoName(null);
-    } catch {
-      addToast({ type: 'error', title: 'Upload failed', message: 'Image upload failed. Try again.' });
-    } finally {
-      setIsUploading(false);
-      e.target.value = '';
     }
   };
+
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await handleImageUploadEvent(file);
+    e.target.value = '';
+  };
+
+  const handleAiInspirationUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const res = await uploadFileAPI(file);
+    if (res) {
+      setInspirationImageId(res.id);
+      setInspirationImageUrl(res.url);
+    }
+    e.target.value = '';
+  };
+
+  useEffect(() => {
+    const handlePaste = async (e: ClipboardEvent) => {
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      for (const item of Array.from(items)) {
+        if (item.type.startsWith('image/')) {
+          const file = item.getAsFile();
+          if (file) {
+            if (mediaTab === 'ai') {
+              const res = await uploadFileAPI(file);
+              if (res) {
+                setInspirationImageId(res.id);
+                setInspirationImageUrl(res.url);
+              }
+            } else {
+              setMediaTab('upload');
+              await handleImageUploadEvent(file);
+            }
+            break;
+          }
+        }
+      }
+    };
+    window.addEventListener('paste', handlePaste);
+    return () => window.removeEventListener('paste', handlePaste);
+  }, [mediaTab]);
 
   const handleVideoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -161,6 +212,7 @@ export default function CreatePost() {
   };
 
   const clearMedia = () => { setUploadedImageId(null); setUploadedImageUrl(null); setUploadedVideoName(null); };
+  const clearInspiration = () => { setInspirationImageId(null); setInspirationImageUrl(null); };
 
   const generateImagesForVariants = (captions: CaptionVariant[], currentPrompt: string) => {
     const slots = captions.slice(0, 3);
@@ -190,7 +242,8 @@ export default function CreatePost() {
       setImageLoadingStates([false, false, false]);
     }
     try {
-      const res = await creativeService.generateCaptions(prompt, selectedPlatforms, uploadedImageId ?? undefined, force);
+      const imageIdToUse = mediaTab === 'upload' ? (uploadedImageId ?? undefined) : (inspirationImageId ?? undefined);
+      const res = await creativeService.generateCaptions(prompt, selectedPlatforms, imageIdToUse, force);
       setVariants(res);
       setSelectedVariant(0);
       setCaption(res.captions[0]?.caption_text ?? '');
@@ -643,13 +696,12 @@ export default function CreatePost() {
             
             <div className="flex flex-wrap p-4 gap-2 bg-stone-50/50 border-b border-stone-100">
               {([
-                { id: 'inspiration', icon: Sparkles, label: 'Add Inspiration', sub: 'Reference a creative' },
-                { id: 'upload',      icon: ImagePlus, label: 'Upload Creative',  sub: 'Your own image/video' },
                 { id: 'ai',          icon: Wand2,     label: 'Generate with AI', sub: 'Let AI design it'    },
+                { id: 'upload',      icon: ImagePlus, label: 'Upload Creative',  sub: 'Your own image/video' },
               ] as const).map(({ id, icon: Icon, label, sub }) => (
                 <button
                   key={id}
-                  onClick={() => setMediaTab(id)}
+                  onClick={() => setMediaTab(id as typeof mediaTab)}
                   className={`flex-1 flex flex-col items-start p-4 rounded-xl border-2 transition-all min-w-[150px] ${
                     mediaTab === id
                       ? 'border-orange-500 bg-orange-50 shadow-sm'
@@ -664,25 +716,7 @@ export default function CreatePost() {
             </div>
 
             <div className="p-6">
-              {/* Inspiration tab */}
-              {mediaTab === 'inspiration' && (
-                <div className="space-y-4 max-w-2xl">
-                  <p className="text-sm text-stone-500">Paste a link to a post, image, or creative that you want to use as reference. Our AI will study its style and adapt it for your dealership.</p>
-                  <input
-                    type="url"
-                    value={inspirationUrl}
-                    onChange={(e) => setInspirationUrl(e.target.value)}
-                    placeholder="https://instagram.com/p/... or paste any image URL"
-                    className="w-full px-4 py-3 border-2 border-stone-200 rounded-xl text-sm focus:outline-none focus:border-orange-400 placeholder:text-stone-400 transition-colors"
-                  />
-                  {inspirationUrl && (
-                    <div className="flex items-center gap-2 p-3 bg-teal-50 border border-teal-200 rounded-xl">
-                      <Check className="w-4 h-4 text-teal-600 shrink-0" />
-                      <p className="text-xs text-teal-700 font-medium">Inspiration URL saved — AI will reference this style</p>
-                    </div>
-                  )}
-                </div>
-              )}
+
 
               {/* Upload tab */}
               {mediaTab === 'upload' && (
@@ -725,6 +759,31 @@ export default function CreatePost() {
               {/* AI Generate tab */}
               {mediaTab === 'ai' && (
                 <div className="space-y-6 max-w-3xl">
+                  <div className="bg-stone-50 border-2 border-stone-200 border-dashed rounded-xl p-4">
+                    <div className="flex flex-col sm:flex-row items-center gap-4">
+                      <div className="flex-1">
+                        <h4 className="text-sm font-bold text-stone-800 mb-1">Inspiration (Optional)</h4>
+                        <p className="text-xs text-stone-500">Have an image or reference you like? Paste it here or upload it to guide our AI.</p>
+                      </div>
+                      <div className="flex-shrink-0 w-full sm:w-auto">
+                        <input ref={aiInspirationInputRef} type="file" accept="image/*" className="hidden" onChange={handleAiInspirationUpload} />
+                        {inspirationImageUrl ? (
+                          <div className="relative rounded-lg overflow-hidden border border-stone-200 group w-32 h-20">
+                            <img src={inspirationImageUrl} alt="Inspiration" className="w-full h-full object-cover" />
+                            <button onClick={clearInspiration} className="absolute top-1 right-1 w-6 h-6 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center transition-colors">
+                              <X className="w-3 h-3 text-white" />
+                            </button>
+                          </div>
+                        ) : (
+                          <button onClick={() => aiInspirationInputRef.current?.click()} disabled={isUploading}
+                            className="w-full sm:w-auto flex items-center justify-center gap-2 px-4 py-2 bg-white border border-stone-300 hover:border-orange-400 hover:text-orange-600 text-stone-600 text-xs font-semibold rounded-lg transition-colors">
+                            <ImagePlus className="w-4 h-4" /> {isUploading ? 'Uploading…' : 'Upload or Paste'}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
                   {!variants && !isGenerating ? (
                     <div className="bg-gradient-to-r from-orange-500 to-amber-500 rounded-xl p-6 text-white shadow-md">
                       <div className="flex items-start gap-4">
