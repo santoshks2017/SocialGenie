@@ -11,11 +11,11 @@
     "build": "tsc",
     "dev": "tsc --watch"
   },
-  "dependencies": {
-    "canvas": "^2.11.2"
-  },
   "devDependencies": {
     "@types/node": "^20.0.0",
     "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "^0.1.99"
   }
 }
