@@ -302,7 +302,6 @@ export default function CreatePost() {
   };
 
   const currentVariant = variants ? variants.captions[selectedVariant] : null;
-  const currentCreative = variants ? variants.creatives[selectedVariant] : null;
   const charLimitMap: Record<string, number> = { google: 1500, facebook: 63206, instagram: 2200 };
   const charLimit = charLimitMap[activePlatformPreview] ?? 2200;
   const activeChips = PROMPT_CHIPS[activeCategory] ?? [];
@@ -551,15 +550,7 @@ export default function CreatePost() {
           <ArrowLeft className="w-4 h-4" />
         </NavLink>
         <span className="text-stone-300 text-sm">/</span>
-        <span className="text-stone-400 text-sm">Create Post</span>
-        {selectedPostType && (
-          <>
-            <span className="text-stone-300 text-sm">/</span>
-            <span className="font-semibold text-stone-900 text-sm">
-              {POST_TYPES.find((t) => t.id === selectedPostType)?.label}
-            </span>
-          </>
-        )}
+        <span className="text-stone-900 text-sm font-semibold">Create Post</span>
         {variants && (
           <span className="ml-auto flex items-center gap-1.5 text-xs text-stone-400">
             <span className="w-1.5 h-1.5 bg-green-400 rounded-full" /> Auto-saved
@@ -570,17 +561,14 @@ export default function CreatePost() {
       <div className="flex flex-1 overflow-hidden">
 
         {/* ════════════════════════════════════════════════════════════════════
-            LEFT PANEL — INPUT
-            Everything the user fills in before clicking Generate
+            LEFT PANEL — inputs + generated post content (scrollable)
         ════════════════════════════════════════════════════════════════════ */}
-        <div className="w-[400px] shrink-0 bg-white border-r border-stone-200 flex flex-col overflow-hidden">
+        <div className="w-[520px] shrink-0 bg-white border-r border-stone-200 flex flex-col overflow-hidden">
           <div className="flex-1 overflow-y-auto p-5 space-y-5">
 
             {/* 1 ── Post Type */}
-            <div>
-              <p className="text-[11px] font-extrabold text-stone-400 uppercase tracking-widest mb-3">
-                1 — What type of post?
-              </p>
+            <section>
+              <p className="text-[11px] font-extrabold text-stone-400 uppercase tracking-widest mb-3">Post type</p>
               <div className="grid grid-cols-5 gap-2">
                 {POST_TYPES.map((type) => {
                   const active = selectedPostType === type.id;
@@ -589,9 +577,7 @@ export default function CreatePost() {
                       key={type.id}
                       onClick={() => handleTypeSelect(type)}
                       className={`flex flex-col items-center gap-1.5 p-2.5 rounded-xl border transition-all ${
-                        active
-                          ? 'border-orange-300 bg-orange-50 shadow-sm'
-                          : 'border-stone-100 hover:border-stone-200 hover:bg-stone-50'
+                        active ? 'border-orange-300 bg-orange-50 shadow-sm' : 'border-stone-100 hover:border-stone-200 hover:bg-stone-50'
                       }`}
                     >
                       <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${active ? 'bg-orange-100' : type.bg}`}>
@@ -604,479 +590,395 @@ export default function CreatePost() {
                   );
                 })}
               </div>
-            </div>
+            </section>
 
-            {/* 2 ── Prompt */}
-            <div>
-              <p className="text-[11px] font-extrabold text-stone-400 uppercase tracking-widest mb-3">
-                2 — Describe your post
-              </p>
+            {/* 2 ── Prompt + suggestions */}
+            <section>
+              <p className="text-[11px] font-extrabold text-stone-400 uppercase tracking-widest mb-3">Describe your post</p>
               <textarea
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
-                placeholder="e.g. Weekend discount on Baleno — ₹30,000 off, limited period offer..."
-                className="w-full h-28 p-4 text-sm border border-stone-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-orange-400 bg-stone-50 placeholder:text-stone-400 leading-relaxed"
+                placeholder="e.g. Diwali special — ₹50,000 discount on all Hyundai models this festive season…"
+                className="w-full h-24 p-4 text-sm border border-stone-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-orange-400 bg-stone-50 placeholder:text-stone-400 leading-relaxed"
                 maxLength={500}
               />
-              <div className="flex items-center justify-between mt-1.5">
+              <div className="flex items-center justify-between mt-1">
                 <span className="text-[11px] text-stone-400">{prompt.length} / 500</span>
                 {prompt.trim() && (
-                  <button onClick={() => setPrompt('')} className="text-[11px] text-stone-400 hover:text-stone-600 transition-colors">
-                    Clear
-                  </button>
+                  <button onClick={() => setPrompt('')} className="text-[11px] text-stone-400 hover:text-stone-600 transition-colors">Clear</button>
                 )}
               </div>
-
-              {/* Suggestion chips */}
               {activeChips.length > 0 && (
                 <div className="mt-3 space-y-1.5">
-                  <p className="text-[10px] font-semibold text-stone-400 uppercase tracking-wide">Suggestions</p>
+                  <p className="text-[10px] font-semibold text-stone-400 uppercase tracking-wide">Quick suggestions</p>
                   {activeChips.map((chip) => (
                     <button
                       key={chip}
                       onClick={() => setPrompt(chip)}
-                      className="w-full text-left text-xs px-3 py-2.5 rounded-xl border border-stone-100 bg-stone-50 hover:bg-orange-50 hover:border-orange-200 transition-colors text-stone-600 line-clamp-1"
+                      className="w-full text-left text-xs px-3 py-2.5 rounded-xl border border-stone-100 bg-stone-50 hover:bg-orange-50 hover:border-orange-200 transition-colors text-stone-600 truncate"
                     >
                       {chip}
                     </button>
                   ))}
                 </div>
               )}
-            </div>
+            </section>
 
-            {/* 3 ── Media (optional) */}
-            <div>
+            {/* 3 ── Media */}
+            <section>
               <p className="text-[11px] font-extrabold text-stone-400 uppercase tracking-widest mb-3">
-                3 — Add media <span className="normal-case font-normal text-stone-400">(optional)</span>
+                Add media <span className="normal-case font-normal">(optional)</span>
               </p>
               <input ref={imageInputRef} type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
               <input ref={videoInputRef} type="file" accept="video/*" className="hidden" onChange={handleVideoUpload} />
-
               {uploadedImageUrl ? (
                 <div className="relative rounded-xl overflow-hidden border border-stone-200 group">
                   <img src={uploadedImageUrl} alt="Uploaded" className="w-full h-32 object-cover" />
-                  <div className="absolute inset-0 bg-black/0 group-hover:bg-black/20 transition-colors" />
-                  <button
-                    onClick={clearMedia}
-                    className="absolute top-2 right-2 w-6 h-6 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center transition-colors"
-                  >
+                  <button onClick={clearMedia} className="absolute top-2 right-2 w-6 h-6 bg-black/60 hover:bg-black/80 rounded-full flex items-center justify-center">
                     <X className="w-3 h-3 text-white" />
                   </button>
-                  <span className="absolute bottom-2 left-2 text-[10px] text-white/80 font-semibold bg-black/40 px-2 py-0.5 rounded-full">
-                    Photo attached
-                  </span>
+                  <span className="absolute bottom-2 left-2 text-[10px] text-white/80 font-semibold bg-black/40 px-2 py-0.5 rounded-full">Photo attached</span>
                 </div>
               ) : uploadedVideoName ? (
                 <div className="flex items-center gap-3 p-3 rounded-xl border border-stone-200 bg-stone-50">
-                  <Video className="w-5 h-5 text-teal-500 flex-shrink-0" />
+                  <Video className="w-5 h-5 text-teal-500 shrink-0" />
                   <p className="text-xs text-stone-600 truncate flex-1">{uploadedVideoName}</p>
-                  <button onClick={clearMedia}><X className="w-3.5 h-3.5 text-stone-400 hover:text-red-500 transition-colors" /></button>
+                  <button onClick={clearMedia}><X className="w-3.5 h-3.5 text-stone-400 hover:text-red-500" /></button>
                 </div>
               ) : (
                 <div className="flex gap-2">
-                  <button
-                    onClick={() => imageInputRef.current?.click()}
-                    disabled={isUploading}
-                    className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-stone-200 hover:border-orange-300 hover:bg-orange-50 transition-colors text-stone-400 hover:text-orange-600 disabled:opacity-40 text-sm font-medium"
-                  >
-                    <ImagePlus className="w-4 h-4" />
-                    {isUploading ? 'Uploading…' : 'Upload Photo'}
+                  <button onClick={() => imageInputRef.current?.click()} disabled={isUploading}
+                    className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-stone-200 hover:border-orange-300 hover:bg-orange-50 transition-colors text-stone-400 hover:text-orange-600 disabled:opacity-40 text-sm font-medium">
+                    <ImagePlus className="w-4 h-4" /> {isUploading ? 'Uploading…' : 'Photo'}
                   </button>
-                  <button
-                    onClick={() => videoInputRef.current?.click()}
-                    disabled={isUploading}
-                    className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-stone-200 hover:border-orange-300 hover:bg-orange-50 transition-colors text-stone-400 hover:text-orange-600 disabled:opacity-40 text-sm font-medium"
-                  >
-                    <Video className="w-4 h-4" />
-                    {isUploading ? 'Uploading…' : 'Upload Video'}
+                  <button onClick={() => videoInputRef.current?.click()} disabled={isUploading}
+                    className="flex-1 flex items-center justify-center gap-2 py-3 rounded-xl border-2 border-dashed border-stone-200 hover:border-orange-300 hover:bg-orange-50 transition-colors text-stone-400 hover:text-orange-600 disabled:opacity-40 text-sm font-medium">
+                    <Video className="w-4 h-4" /> {isUploading ? 'Uploading…' : 'Video'}
                   </button>
                 </div>
               )}
-            </div>
+            </section>
 
-            {/* 4 ── Publish To */}
-            <div>
-              <p className="text-[11px] font-extrabold text-stone-400 uppercase tracking-widest mb-3">
-                4 — Publish to
-              </p>
+            {/* 4 ── Platforms */}
+            <section>
+              <p className="text-[11px] font-extrabold text-stone-400 uppercase tracking-widest mb-3">Publish to</p>
               <div className="flex gap-2">
                 {PLATFORMS.map(({ id, label, icon: Icon, color, dot }) => (
-                  <button
-                    key={id}
-                    onClick={() => togglePlatform(id)}
+                  <button key={id} onClick={() => togglePlatform(id)}
                     className={`flex-1 flex flex-col items-center gap-1.5 py-2.5 rounded-xl border-2 transition-all ${
-                      selectedPlatforms.includes(id)
-                        ? 'border-stone-300 bg-stone-50'
-                        : 'border-stone-100 opacity-40 hover:opacity-70'
+                      selectedPlatforms.includes(id) ? 'border-stone-300 bg-stone-50' : 'border-stone-100 opacity-40 hover:opacity-70'
                     }`}
                   >
                     <Icon className={`w-4 h-4 ${color}`} />
                     <div className="flex items-center gap-1">
                       {selectedPlatforms.includes(id) && <div className={`w-1.5 h-1.5 rounded-full ${dot}`} />}
-                      <span className="text-[10px] font-semibold text-stone-600 leading-none">
-                        {id === 'gmb' ? 'Google' : label}
-                      </span>
+                      <span className="text-[10px] font-semibold text-stone-600">{id === 'gmb' ? 'Google' : label}</span>
                     </div>
                   </button>
                 ))}
               </div>
-            </div>
+            </section>
 
-          </div>
+            {/* ── Generated content — shown after AI generation ── */}
+            {(variants || isGenerating) && (
+              <div className="border-t border-stone-100 pt-5 space-y-4">
 
-          {/* ── Generate button — sticky at bottom of input panel ── */}
-          <div className="p-4 border-t border-stone-100 bg-white shrink-0">
-            <button
-              onClick={() => handleGenerate(false)}
-              disabled={!prompt.trim() || isGenerating}
-              className="w-full flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-bold py-3.5 rounded-xl transition-colors shadow-sm shadow-orange-200"
-            >
-              {isGenerating ? (
-                <><RefreshCw className="w-4 h-4 animate-spin" /> Generating with AI…</>
-              ) : (
-                <><Sparkles className="w-4 h-4" /> Generate with AI</>
-              )}
-            </button>
-            {!prompt.trim() && (
-              <p className="text-center text-[11px] text-stone-400 mt-2">
-                Pick a post type and describe your post above
-              </p>
+                {/* Caption variant tabs */}
+                {isGenerating ? (
+                  <div className="space-y-3">
+                    <div className="h-3 w-28 bg-stone-100 rounded animate-pulse" />
+                    <div className="h-28 bg-stone-100 rounded-xl animate-pulse" />
+                    <div className="flex gap-2">
+                      {[0,1,2,3].map(i => <div key={i} className="h-6 w-20 bg-stone-100 rounded-full animate-pulse" />)}
+                    </div>
+                  </div>
+                ) : variants && (
+                  <>
+                    {/* Style tabs */}
+                    <div>
+                      <p className="text-[11px] font-extrabold text-stone-400 uppercase tracking-widest mb-2">Caption style</p>
+                      <div className="flex gap-1.5">
+                        {variants.captions.map((v, i) => (
+                          <button key={i} onClick={() => handleVariantSelect(i)}
+                            className={`flex-1 py-1.5 px-2 rounded-lg text-[11px] font-bold border transition-all ${
+                              selectedVariant === i
+                                ? 'bg-orange-600 text-white border-orange-600'
+                                : 'bg-white text-stone-600 border-stone-200 hover:border-orange-300'
+                            }`}
+                          >
+                            {v.style ? v.style.charAt(0).toUpperCase() + v.style.slice(1) : `Style ${i + 1}`}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Caption editor */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <p className="text-[11px] font-extrabold text-stone-400 uppercase tracking-widest">Caption</p>
+                          <span className="text-[10px] bg-teal-100 text-teal-700 font-bold px-2 py-0.5 rounded-full flex items-center gap-1">
+                            <Sparkles className="w-2.5 h-2.5" /> AI
+                          </span>
+                        </div>
+                        <div className="flex gap-1 bg-stone-100 p-0.5 rounded-lg">
+                          {(['hinglish', 'english', 'hindi'] as const).map((tone) => (
+                            <button key={tone} onClick={() => setToneActive(tone)}
+                              className={`text-[10px] font-semibold px-2 py-1 rounded-md transition-colors capitalize ${
+                                toneActive === tone ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'
+                              }`}>
+                              {tone === 'hinglish' ? 'Hinglish' : tone === 'english' ? 'EN' : 'हिं'}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <textarea
+                        value={caption}
+                        onChange={(e) => setCaption(e.target.value)}
+                        className="w-full h-32 p-3.5 border border-stone-200 rounded-xl text-sm text-stone-800 resize-none focus:outline-none focus:ring-2 focus:ring-orange-400 leading-relaxed"
+                        maxLength={charLimit}
+                      />
+                      <div className="flex justify-between mt-1">
+                        <span className="text-[11px] text-stone-400">{caption.length} / {charLimit}</span>
+                        <span className="text-[11px] text-stone-400 capitalize">{activePlatformPreview} limit</span>
+                      </div>
+                    </div>
+
+                    {/* Hashtags */}
+                    {currentVariant && (
+                      <div>
+                        <p className="text-[11px] font-extrabold text-stone-400 uppercase tracking-widest mb-2">Hashtags</p>
+                        <div className="flex gap-1.5 flex-wrap">
+                          {currentVariant.hashtags.map((h) => (
+                            <span key={h} className="bg-stone-100 text-stone-700 text-xs font-semibold px-2.5 py-1 rounded-full">{h}</span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Design thumbnails */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-[11px] font-extrabold text-stone-400 uppercase tracking-widest">Design</p>
+                        <button onClick={() => handleGenerate(true)}
+                          className="flex items-center gap-1 text-[11px] text-stone-500 hover:text-orange-600 font-semibold transition-colors">
+                          <RefreshCw className={`w-3 h-3 ${isGeneratingImages ? 'animate-spin' : ''}`} /> Regenerate
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        {TEMPLATE_THEMES.map((theme, i) => {
+                          const aiImg = aiImageUrls[i] ?? null;
+                          const loading = imageLoadingStates[i] ?? false;
+                          return (
+                            <button key={i} onClick={() => handleVariantSelect(i)}
+                              className={`relative rounded-xl overflow-hidden border-2 transition-all ${
+                                selectedVariant === i ? 'border-orange-500 shadow-md shadow-orange-100' : 'border-transparent hover:border-stone-300'
+                              }`}
+                            >
+                              {aiImg ? (
+                                <img src={aiImg} alt={theme.label} className="w-full aspect-square object-cover" />
+                              ) : loading ? (
+                                <div className={`aspect-square bg-gradient-to-br ${theme.gradient} flex items-center justify-center`}>
+                                  <Sparkles className="w-4 h-4 text-white/70 animate-pulse" />
+                                </div>
+                              ) : (
+                                <div className={`aspect-square bg-gradient-to-br ${theme.gradient} flex items-center justify-center`}>
+                                  <div className={`${theme.accent} rounded px-1.5 py-0.5`}>
+                                    <p className="text-white text-[8px] font-bold">{theme.label}</p>
+                                  </div>
+                                </div>
+                              )}
+                              {selectedVariant === i && (
+                                <div className="absolute top-1 right-1 w-4 h-4 bg-orange-500 rounded-full flex items-center justify-center">
+                                  <Check className="w-2.5 h-2.5 text-white" />
+                                </div>
+                              )}
+                              <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-2 py-1">
+                                <p className="text-white text-[9px] font-semibold">{theme.label}</p>
+                              </div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* Publish actions */}
+                    <div className="space-y-2 pb-2">
+                      <button onClick={handlePublishNow} disabled={isPublishing || selectedPlatforms.length === 0}
+                        className="w-full flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white text-sm font-bold py-3.5 rounded-xl transition-colors shadow-sm shadow-orange-200">
+                        {isPublishing ? <><RefreshCw className="w-4 h-4 animate-spin" /> Publishing…</> : <><Send className="w-4 h-4" /> Post Everywhere</>}
+                      </button>
+                      <div className="flex gap-2">
+                        <button onClick={() => setShowScheduleModal(true)} disabled={selectedPlatforms.length === 0}
+                          className="flex-1 flex items-center justify-center gap-1.5 text-sm font-semibold text-stone-700 border border-stone-200 rounded-xl py-2.5 hover:bg-stone-50 disabled:opacity-50 transition-colors">
+                          <Calendar className="w-3.5 h-3.5" /> Schedule
+                        </button>
+                        <button className="flex-1 flex items-center justify-center gap-1.5 text-sm font-semibold text-stone-700 border border-stone-200 rounded-xl py-2.5 hover:bg-stone-50 transition-colors">
+                          <Download className="w-3.5 h-3.5" /> Download
+                        </button>
+                        <button className="flex items-center justify-center gap-1.5 px-3 text-sm font-semibold text-yellow-600 border border-yellow-200 bg-yellow-50 rounded-xl py-2.5 hover:bg-yellow-100 transition-colors">
+                          <Zap className="w-3.5 h-3.5" /> Boost
+                        </button>
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
             )}
+
           </div>
+
+          {/* Generate button — sticky at bottom */}
+          {!variants && (
+            <div className="p-4 border-t border-stone-100 bg-white shrink-0">
+              <button onClick={() => handleGenerate(false)} disabled={!prompt.trim() || isGenerating}
+                className="w-full flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-40 disabled:cursor-not-allowed text-white text-sm font-bold py-3.5 rounded-xl transition-colors shadow-sm shadow-orange-200">
+                {isGenerating ? <><RefreshCw className="w-4 h-4 animate-spin" /> Generating with AI…</> : <><Sparkles className="w-4 h-4" /> Generate with AI</>}
+              </button>
+              {!prompt.trim() && (
+                <p className="text-center text-[11px] text-stone-400 mt-2">Pick a post type and describe your post above</p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* ════════════════════════════════════════════════════════════════════
-            RIGHT PANEL — OUTPUT
-            Shows after generation: creative preview, caption editor, actions
+            RIGHT PANEL — live platform preview (fixed, non-scrolling)
         ════════════════════════════════════════════════════════════════════ */}
-        <div className="flex-1 flex flex-col overflow-hidden">
+        <div className="flex-1 flex flex-col overflow-hidden bg-[#F5F0EA]">
 
-          {/* ── Empty state — shown before first generate ── */}
-          {!variants && !isGenerating && (
-            <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
-              <div className="w-20 h-20 bg-white rounded-3xl border border-stone-200 shadow-sm flex items-center justify-center mb-5">
-                <Sparkles className="w-9 h-9 text-orange-300" />
-              </div>
-              <h3 className="text-lg font-extrabold text-stone-700">Your creative will appear here</h3>
-              <p className="text-sm text-stone-400 mt-2 max-w-xs">
-                Fill in the details on the left — choose a post type, describe your offer, and click <strong className="text-orange-600">Generate with AI</strong>.
-              </p>
-              <div className="mt-8 flex flex-col gap-2 items-center text-xs text-stone-400">
-                <div className="flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-orange-100 text-orange-600 font-bold flex items-center justify-center text-[10px]">1</span>
-                  Pick post type
-                </div>
-                <div className="w-px h-4 bg-stone-200" />
-                <div className="flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-orange-100 text-orange-600 font-bold flex items-center justify-center text-[10px]">2</span>
-                  Describe your post
-                </div>
-                <div className="w-px h-4 bg-stone-200" />
-                <div className="flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-orange-100 text-orange-600 font-bold flex items-center justify-center text-[10px]">3</span>
-                  Click Generate with AI
-                </div>
-              </div>
+          {/* Platform tab switcher */}
+          <div className="flex items-center justify-between px-6 pt-5 pb-3 shrink-0">
+            <p className="text-sm font-bold text-stone-700">Live Preview</p>
+            <div className="flex gap-1 bg-white border border-stone-200 p-1 rounded-xl shadow-sm">
+              {(['google', 'facebook', 'instagram'] as const).map((p) => (
+                <button key={p} onClick={() => setActivePlatformPreview(p)}
+                  className={`text-[11px] font-semibold px-3 py-1.5 rounded-lg transition-all ${
+                    activePlatformPreview === p ? 'bg-stone-900 text-white shadow-sm' : 'text-stone-500 hover:text-stone-700'
+                  }`}>
+                  {p === 'google' ? 'Google' : p === 'facebook' ? 'Facebook' : 'Instagram'}
+                </button>
+              ))}
             </div>
-          )}
+          </div>
 
-          {/* ── Generating skeleton ── */}
-          {isGenerating && (
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="max-w-2xl mx-auto space-y-4">
-                <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm space-y-3">
-                  <div className="h-4 w-32 bg-stone-100 rounded-lg animate-pulse" />
-                  <div className="grid grid-cols-3 gap-3">
-                    {[0, 1, 2].map((i) => <div key={i} className="aspect-square rounded-xl bg-stone-100 animate-pulse" />)}
+          {/* Mockup card — centered */}
+          <div className="flex-1 overflow-y-auto flex items-start justify-center px-6 pb-6">
+            <div className="w-full max-w-sm">
+              {/* Social post card */}
+              <div className="bg-white rounded-2xl border border-stone-200 shadow-lg overflow-hidden">
+
+                {/* Post header */}
+                <div className="flex items-center gap-2.5 px-4 py-3 border-b border-stone-100">
+                  <div className="w-9 h-9 bg-orange-600 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0">RM</div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13px] font-bold text-stone-900 leading-none">Rajesh Motors</p>
+                    <p className="text-[11px] text-stone-400 mt-0.5">
+                      Just now ·&nbsp;
+                      {activePlatformPreview === 'google' ? 'Google My Business' : activePlatformPreview === 'facebook' ? 'Facebook' : 'Instagram'}
+                    </p>
                   </div>
-                </div>
-                <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm space-y-3">
-                  <div className="h-4 w-40 bg-stone-100 rounded-lg animate-pulse" />
-                  <div className="h-24 bg-stone-100 rounded-xl animate-pulse" />
-                  <div className="flex gap-2">
-                    {[0, 1, 2, 3].map((i) => <div key={i} className="h-6 w-20 bg-stone-100 rounded-full animate-pulse" />)}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* ── Generated output ── */}
-          {variants && !isGenerating && (
-            <div className="flex-1 overflow-y-auto p-6">
-              <div className="max-w-2xl mx-auto space-y-4">
-
-                {/* ── Creative image + design picker ── */}
-                <div className="bg-white rounded-2xl border border-stone-200 shadow-sm overflow-hidden">
-
-                  {/* Platform preview tabs */}
-                  <div className="flex items-center justify-between px-5 pt-4 pb-3 border-b border-stone-100">
-                    <p className="text-sm font-bold text-stone-900">Creative Preview</p>
-                    <div className="flex gap-1 bg-stone-100 p-1 rounded-xl">
-                      {(['google', 'facebook', 'instagram'] as const).map((p) => (
-                        <button
-                          key={p}
-                          onClick={() => setActivePlatformPreview(p)}
-                          className={`text-[11px] font-semibold px-3 py-1.5 rounded-lg transition-all capitalize ${
-                            activePlatformPreview === p
-                              ? 'bg-white text-stone-900 shadow-sm'
-                              : 'text-stone-500 hover:text-stone-700'
-                          }`}
-                        >
-                          {p === 'google' ? 'Google' : p === 'facebook' ? 'Facebook' : 'Instagram'}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Large creative */}
-                  <div className="px-5 py-4">
-                    <div className="rounded-xl overflow-hidden border border-stone-100 bg-stone-50 mb-4">
-                      {/* Fake platform post header */}
-                      <div className="flex items-center gap-2.5 px-3 py-2.5 border-b border-stone-100 bg-white">
-                        <div className="w-8 h-8 bg-orange-600 rounded-full flex items-center justify-center text-white text-xs font-bold shrink-0">
-                          RM
-                        </div>
-                        <div>
-                          <p className="text-xs font-bold text-stone-900">Rajesh Motors</p>
-                          <p className="text-[10px] text-stone-400">
-                            Just now · {activePlatformPreview === 'google' ? 'Google My Business' : activePlatformPreview === 'facebook' ? 'Facebook' : 'Instagram Business'}
-                          </p>
-                        </div>
-                      </div>
-
-                      {/* The creative image */}
-                      <div className="relative">
-                        {aiImageUrls[selectedVariant] ? (
-                          <>
-                            <img
-                              src={aiImageUrls[selectedVariant]!}
-                              alt="AI Creative"
-                              className="w-full aspect-video object-cover"
-                            />
-                            <span className="absolute top-2 left-2 flex items-center gap-1 bg-black/60 text-white text-[9px] font-bold px-2 py-0.5 rounded-full">
-                              <Sparkles className="w-2.5 h-2.5" /> AI Generated
-                            </span>
-                          </>
-                        ) : imageLoadingStates[selectedVariant] ? (
-                          <div className={`w-full aspect-video bg-gradient-to-br ${TEMPLATE_THEMES[Math.min(selectedVariant, 2)]?.gradient ?? 'from-stone-900 to-stone-800'} flex flex-col items-center justify-center gap-2`}>
-                            <Sparkles className="w-6 h-6 text-white/70 animate-pulse" />
-                            <p className="text-sm text-white/60 font-semibold">AI is generating your creative…</p>
-                          </div>
-                        ) : currentCreative?.thumbnail_url ? (
-                          <img src={currentCreative.thumbnail_url} alt="Creative" className="w-full aspect-video object-cover" />
-                        ) : (
-                          <div className={`w-full aspect-video bg-gradient-to-br ${TEMPLATE_THEMES[Math.min(selectedVariant, 2)]?.gradient ?? 'from-stone-900 to-stone-800'} flex flex-col items-center justify-center p-6`}>
-                            <p className="text-white/50 text-xs font-bold uppercase tracking-widest mb-3">
-                              {POST_TYPES.find((t) => t.id === selectedPostType)?.label ?? 'Post Preview'}
-                            </p>
-                            <p className="text-white text-base font-bold text-center leading-snug mb-4 max-w-xs">
-                              {prompt.slice(0, 60) || 'Your creative will appear here'}
-                            </p>
-                            <div className="bg-orange-600 rounded-full px-4 py-1.5">
-                              <p className="text-white text-xs font-bold">Rajesh Motors</p>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Caption preview inside post mockup */}
-                      {caption && (
-                        <div className="px-3 py-2.5 bg-white border-t border-stone-100">
-                          <p className="text-xs text-stone-700 line-clamp-2 leading-relaxed">{caption}</p>
-                          {currentVariant && (
-                            <div className="flex gap-1.5 flex-wrap mt-1.5">
-                              {currentVariant.hashtags.slice(0, 4).map((h) => (
-                                <span key={h} className="text-[10px] text-orange-600 font-semibold">{h}</span>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {/* Platform action bar */}
-                      <div className="px-3 py-2 border-t border-stone-100 flex items-center gap-3 bg-white">
-                        {activePlatformPreview === 'instagram' ? (
-                          <>
-                            <span className="text-stone-400 text-sm">♡</span>
-                            <span className="text-stone-400 text-sm">○</span>
-                            <span className="text-stone-400 text-sm">↗</span>
-                            <span className="ml-auto text-stone-400 text-sm">⊡</span>
-                          </>
-                        ) : (
-                          <>
-                            <span className="text-[11px] text-stone-400">👍 Like</span>
-                            <span className="text-[11px] text-stone-400">💬 Comment</span>
-                            <span className="text-[11px] text-stone-400">↗ Share</span>
-                          </>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Design variant picker */}
-                    <div className="flex items-center justify-between mb-3">
-                      <p className="text-xs font-bold text-stone-700">Choose Design</p>
-                      <button
-                        onClick={() => handleGenerate(true)}
-                        className="flex items-center gap-1 text-xs text-stone-500 hover:text-orange-600 font-semibold transition-colors"
-                      >
-                        <RefreshCw className={`w-3 h-3 ${isGeneratingImages ? 'animate-spin' : ''}`} />
-                        Regenerate
-                      </button>
-                    </div>
-                    <div className="grid grid-cols-3 gap-2">
-                      {TEMPLATE_THEMES.map((theme, i) => {
-                        const aiImg = aiImageUrls[i] ?? null;
-                        const isSlotLoading = imageLoadingStates[i] ?? false;
-                        return (
-                          <button
-                            key={i}
-                            onClick={() => handleVariantSelect(i)}
-                            className={`relative rounded-xl overflow-hidden border-2 transition-all ${
-                              selectedVariant === i
-                                ? 'border-orange-500 shadow-md shadow-orange-100'
-                                : 'border-transparent hover:border-stone-300'
-                            }`}
-                          >
-                            {aiImg ? (
-                              <img src={aiImg} alt={theme.label} className="w-full aspect-square object-cover" />
-                            ) : isSlotLoading ? (
-                              <div className={`aspect-square bg-gradient-to-br ${theme.gradient} flex flex-col items-center justify-center gap-1`}>
-                                <Sparkles className="w-4 h-4 text-white/70 animate-pulse" />
-                                <p className="text-white/50 text-[8px] font-bold uppercase tracking-wide">AI creating…</p>
-                              </div>
-                            ) : (
-                              <div className={`aspect-square bg-gradient-to-br ${theme.gradient} flex flex-col items-center justify-center p-2`}>
-                                <p className="text-white/50 text-[7px] font-bold uppercase tracking-widest mb-1">{theme.sub}</p>
-                                <div className={`${theme.accent} rounded px-1.5 py-0.5`}>
-                                  <p className="text-white text-[8px] font-bold">{theme.label}</p>
-                                </div>
-                              </div>
-                            )}
-                            {selectedVariant === i && (
-                              <div className="absolute top-1 right-1 w-5 h-5 bg-orange-500 rounded-full flex items-center justify-center">
-                                <Check className="w-3 h-3 text-white" />
-                              </div>
-                            )}
-                            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-2 py-1">
-                              <p className="text-white text-[9px] font-semibold">{theme.label}</p>
-                            </div>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
+                  {activePlatformPreview === 'facebook' && (
+                    <button className="text-[11px] font-bold text-[#1877F2] bg-[#e7f0fd] px-3 py-1 rounded-full">+ Follow</button>
+                  )}
                 </div>
 
-                {/* ── Caption & Hashtags ── */}
-                <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-bold text-stone-900 text-sm">Caption</h3>
-                      <span className="flex items-center gap-1 text-[10px] bg-teal-100 text-teal-700 font-bold px-2 py-0.5 rounded-full">
+                {/* Creative image */}
+                <div className="relative bg-stone-100">
+                  {aiImageUrls[selectedVariant] ? (
+                    <>
+                      <img src={aiImageUrls[selectedVariant]!} alt="Creative" className="w-full aspect-square object-cover" />
+                      <span className="absolute top-2 left-2 flex items-center gap-1 bg-black/60 text-white text-[9px] font-bold px-2 py-1 rounded-full">
                         <Sparkles className="w-2.5 h-2.5" /> AI Generated
                       </span>
+                    </>
+                  ) : imageLoadingStates[selectedVariant] ? (
+                    <div className={`aspect-square bg-gradient-to-br ${TEMPLATE_THEMES[Math.min(selectedVariant, 2)]?.gradient ?? 'from-stone-900 to-stone-800'} flex flex-col items-center justify-center gap-2`}>
+                      <Sparkles className="w-7 h-7 text-white/70 animate-pulse" />
+                      <p className="text-sm text-white/60 font-semibold">Generating creative…</p>
                     </div>
-                    {/* Tone selector */}
-                    <div className="flex gap-1 bg-stone-100 p-0.5 rounded-lg">
-                      {(['hinglish', 'english', 'hindi'] as const).map((tone) => (
-                        <button
-                          key={tone}
-                          onClick={() => setToneActive(tone)}
-                          className={`text-[10px] font-semibold px-2.5 py-1 rounded-md transition-colors capitalize ${
-                            toneActive === tone
-                              ? 'bg-white text-stone-900 shadow-sm'
-                              : 'text-stone-500 hover:text-stone-700'
-                          }`}
-                        >
-                          {tone === 'hinglish' ? 'Hinglish' : tone === 'english' ? 'English' : 'Hindi'}
-                        </button>
-                      ))}
+                  ) : isGenerating ? (
+                    <div className="aspect-square bg-stone-200 animate-pulse flex items-center justify-center">
+                      <Sparkles className="w-8 h-8 text-stone-400 animate-pulse" />
                     </div>
-                  </div>
-
-                  <textarea
-                    value={caption}
-                    onChange={(e) => setCaption(e.target.value)}
-                    className="w-full h-32 p-3.5 border border-stone-200 rounded-xl text-sm text-stone-800 resize-none focus:outline-none focus:ring-2 focus:ring-orange-400 leading-relaxed"
-                    maxLength={charLimit}
-                  />
-                  <div className="flex items-center justify-between mt-1.5">
-                    <span className="text-[11px] text-stone-400">{caption.length} / {charLimit} chars</span>
-                    <span className="text-[11px] text-stone-400 capitalize">{activePlatformPreview} limit</span>
-                  </div>
-
-                  {currentVariant && (
-                    <div className="mt-3 pt-3 border-t border-stone-100">
-                      <p className="text-[10px] font-extrabold text-stone-400 uppercase tracking-widest mb-2">Hashtags</p>
-                      <div className="flex gap-1.5 flex-wrap">
-                        {currentVariant.hashtags.map((h) => (
-                          <span key={h} className="flex items-center gap-1 bg-stone-100 text-stone-700 text-xs font-semibold px-2.5 py-1 rounded-full">
-                            {h}
-                          </span>
-                        ))}
+                  ) : prompt ? (
+                    <div className={`aspect-square bg-gradient-to-br ${TEMPLATE_THEMES[Math.min(selectedVariant, 2)]?.gradient ?? 'from-stone-900 to-stone-800'} flex flex-col items-center justify-center p-6`}>
+                      <p className="text-white/50 text-xs font-bold uppercase tracking-widest mb-3">
+                        {POST_TYPES.find((t) => t.id === selectedPostType)?.label ?? 'Your Post'}
+                      </p>
+                      <p className="text-white text-sm font-bold text-center leading-snug max-w-[180px]">
+                        {prompt.slice(0, 60)}{prompt.length > 60 ? '…' : ''}
+                      </p>
+                      <div className="mt-4 bg-orange-600 rounded-full px-4 py-1.5">
+                        <p className="text-white text-xs font-bold">Rajesh Motors</p>
                       </div>
+                    </div>
+                  ) : (
+                    <div className="aspect-square bg-stone-100 flex flex-col items-center justify-center gap-3">
+                      <div className="w-14 h-14 rounded-2xl bg-stone-200 flex items-center justify-center">
+                        <Sparkles className="w-7 h-7 text-stone-400" />
+                      </div>
+                      <p className="text-sm text-stone-400 font-medium">Preview appears here</p>
                     </div>
                   )}
                 </div>
 
-                {/* ── Publish actions ── */}
-                <div className="bg-white rounded-2xl border border-stone-200 p-5 shadow-sm space-y-3">
-                  {/* Primary action */}
-                  <button
-                    onClick={handlePublishNow}
-                    disabled={isPublishing || selectedPlatforms.length === 0}
-                    className="w-full flex items-center justify-center gap-2 bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white text-sm font-bold py-3.5 rounded-xl transition-colors shadow-sm shadow-orange-200"
-                  >
-                    {isPublishing ? (
-                      <><RefreshCw className="w-4 h-4 animate-spin" /> Publishing…</>
-                    ) : (
-                      <><Send className="w-4 h-4" /> Post Everywhere</>
-                    )}
-                  </button>
-
-                  {/* Secondary actions */}
-                  <div className="flex gap-2">
-                    <button
-                      onClick={() => setShowScheduleModal(true)}
-                      disabled={selectedPlatforms.length === 0}
-                      className="flex-1 flex items-center justify-center gap-1.5 text-sm font-semibold text-stone-700 border border-stone-200 rounded-xl py-2.5 hover:bg-stone-50 disabled:opacity-50 transition-colors"
-                    >
-                      <Calendar className="w-3.5 h-3.5" /> Schedule
-                    </button>
-                    <button
-                      className="flex-1 flex items-center justify-center gap-1.5 text-sm font-semibold text-stone-700 border border-stone-200 rounded-xl py-2.5 hover:bg-stone-50 transition-colors"
-                    >
-                      <Download className="w-3.5 h-3.5" /> Download
-                    </button>
-                    <button
-                      className="flex items-center justify-center gap-1.5 px-3 text-sm font-semibold text-yellow-600 border border-yellow-200 bg-yellow-50 rounded-xl py-2.5 hover:bg-yellow-100 transition-colors"
-                    >
-                      <Zap className="w-3.5 h-3.5" /> Boost
-                    </button>
-                  </div>
-
-                  {/* Platform status */}
-                  <div className="pt-1 flex items-center gap-4">
-                    <p className="text-[10px] font-bold text-stone-400 uppercase tracking-wide">Posting to</p>
-                    <div className="flex items-center gap-3">
-                      {PLATFORMS.map(({ id, label, icon: Icon, color }) => (
-                        <div
-                          key={id}
-                          className={`flex items-center gap-1 transition-opacity ${selectedPlatforms.includes(id) ? 'opacity-100' : 'opacity-25'}`}
-                        >
-                          <Icon className={`w-3.5 h-3.5 ${color}`} />
-                          <span className="text-[10px] text-stone-600 font-semibold">{id === 'gmb' ? 'Google' : label}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+                {/* Caption area */}
+                <div className="px-4 py-3 border-t border-stone-100">
+                  {caption ? (
+                    <>
+                      <p className="text-[13px] text-stone-800 leading-relaxed line-clamp-3">{caption}</p>
+                      {currentVariant && currentVariant.hashtags.length > 0 && (
+                        <p className="mt-1.5 text-[12px] text-orange-600 font-medium line-clamp-1">
+                          {currentVariant.hashtags.slice(0, 4).join(' ')}
+                        </p>
+                      )}
+                    </>
+                  ) : (
+                    <p className="text-[13px] text-stone-400 italic">Your caption will appear here…</p>
+                  )}
                 </div>
 
+                {/* Platform action bar */}
+                <div className="px-4 py-2.5 border-t border-stone-100 bg-stone-50">
+                  {activePlatformPreview === 'instagram' ? (
+                    <div className="flex items-center gap-4">
+                      <span className="text-stone-500 text-lg">♡</span>
+                      <span className="text-stone-500 text-lg">💬</span>
+                      <span className="text-stone-500 text-lg">↗</span>
+                      <span className="ml-auto text-stone-500 text-lg">⊡</span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-4">
+                      <span className="text-[12px] text-stone-500 font-medium">👍 Like</span>
+                      <span className="text-[12px] text-stone-500 font-medium">💬 Comment</span>
+                      <span className="text-[12px] text-stone-500 font-medium">↗ Share</span>
+                    </div>
+                  )}
+                </div>
               </div>
-            </div>
-          )}
 
+              {/* Helper hint when no content yet */}
+              {!variants && !isGenerating && (
+                <div className="mt-5 flex flex-col gap-2 items-center text-xs text-stone-400">
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-orange-100 text-orange-600 font-bold flex items-center justify-center text-[10px]">1</span>
+                    Pick a post type
+                  </div>
+                  <div className="w-px h-3 bg-stone-200" />
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-orange-100 text-orange-600 font-bold flex items-center justify-center text-[10px]">2</span>
+                    Describe your offer
+                  </div>
+                  <div className="w-px h-3 bg-stone-200" />
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-full bg-orange-100 text-orange-600 font-bold flex items-center justify-center text-[10px]">3</span>
+                    Generate with AI
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -1087,29 +989,22 @@ export default function CreatePost() {
             <h3 className="text-lg font-extrabold text-stone-900">Schedule Post</h3>
             <div>
               <label className="block text-sm font-semibold text-stone-700 mb-1">Date &amp; Time</label>
-              <input
-                type="datetime-local"
+              <input type="datetime-local"
                 className="w-full border border-stone-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-orange-400 focus:outline-none"
-                value={scheduleTime}
-                onChange={(e) => setScheduleTime(e.target.value)}
+                value={scheduleTime} onChange={(e) => setScheduleTime(e.target.value)}
               />
             </div>
             <div className="bg-orange-50 border border-orange-100 rounded-xl p-3 text-xs text-orange-700">
               <strong>Best time:</strong> Tomorrow, 9:00 AM — based on your audience engagement patterns
             </div>
             <div className="flex gap-3">
-              <button
-                onClick={() => setShowScheduleModal(false)}
-                className="flex-1 py-2.5 text-sm font-semibold text-stone-700 border border-stone-200 rounded-xl hover:bg-stone-50 transition-colors"
-              >
+              <button onClick={() => setShowScheduleModal(false)}
+                className="flex-1 py-2.5 text-sm font-semibold text-stone-700 border border-stone-200 rounded-xl hover:bg-stone-50 transition-colors">
                 Cancel
               </button>
-              <button
-                onClick={confirmSchedule}
-                disabled={isPublishing || !scheduleTime}
-                className="flex-1 py-2.5 text-sm font-bold bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white rounded-xl transition-colors"
-              >
-                {isPublishing ? 'Scheduling…' : 'Confirm Schedule'}
+              <button onClick={confirmSchedule} disabled={isPublishing || !scheduleTime}
+                className="flex-1 py-2.5 text-sm font-bold bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white rounded-xl transition-colors">
+                {isPublishing ? 'Scheduling…' : 'Confirm'}
               </button>
             </div>
           </div>
