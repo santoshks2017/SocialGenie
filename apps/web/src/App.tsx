@@ -21,6 +21,7 @@ import AuthCallbackPage from './pages/AuthCallbackPage';
 import ConnectProfilesPage from './pages/ConnectProfilesPage';
 import AccountsPage from './pages/AccountsPage';
 import ConnectAccountPage from './pages/ConnectAccountPage';
+import OAuthCallbackPage from './pages/OAuthCallbackPage';
 import type { UserInfo } from './lib/permissions';
 
 // ─── Nav config ───────────────────────────────────────────────────────────────
@@ -614,6 +615,7 @@ function AppRoutes() {
       {/* Public routes — /login always redirects to dashboard */}
       <Route path="/login" element={<Navigate to="/" replace />} />
       <Route path="/auth/callback" element={<AuthCallbackPage onLogin={handleLogin} />} />
+      <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
 
       {/* Protected routes */}
       <Route path="/onboarding" element={<RequireAuth><ConnectProfilesPage /></RequireAuth>} />
