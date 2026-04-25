@@ -47,7 +47,7 @@ const PROMPT_CHIPS: Record<string, string[]> = {
   ],
   'Festival Offer': [
     'Diwali special offer — ₹50,000 cash discount on all models this festive season',
-    'Navratri celebration deal — zero down payment and free accessories worth ₹20,000',
+    'Festival season deal — Zero processing fee and free accessories worth ₹20,000',
     'Special weekend offer — Exchange bonus up to ₹75,000 on all models',
   ],
   'Testimonial': [
@@ -124,7 +124,13 @@ export default function CreatePost() {
     () => draft.toneActive ?? 'english',
   );
   const [showScheduleModal, setShowScheduleModal] = useState(false);
-  const [scheduleTime, setScheduleTime] = useState('');
+  // Pre-fill schedule time from ?date=YYYY-MM-DD param (e.g. from Calendar page)
+  const [scheduleTime, setScheduleTime] = useState<string>(() => {
+    const d = searchParams.get('date');
+    if (!d) return '';
+    // Set default time to 10:00 AM on the selected date
+    return `${d}T10:00`;
+  });
   const [published, setPublished] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [uploadedImageId, setUploadedImageId] = useState<string | null>(null);
@@ -166,8 +172,15 @@ export default function CreatePost() {
   const [uploadingVideoImage, setUploadingVideoImage] = useState(false);
   const videoImageRef = useRef<HTMLInputElement>(null);
 
-  // Dealer display name — prefer dealer profile, fall back to auth user name
-  const dealerDisplayName = user?.name ?? 'Your Dealership';
+  const [dealerName, setDealerName] = useState<string | null>(null);
+  useEffect(() => {
+    api.get<{ success: boolean; dealer?: { name?: string } }>('/dealer/profile')
+      .then((res) => { if (res.dealer?.name) setDealerName(res.dealer.name); })
+      .catch(() => {});
+  }, []);
+
+  // Dealer display name — prefer dealer profile name, fall back to auth user name
+  const dealerDisplayName = dealerName ?? user?.name ?? 'Your Dealership';
   const dealerInitials = dealerDisplayName
     .split(' ')
     .map((w) => w[0])
@@ -376,7 +389,7 @@ export default function CreatePost() {
       localStorage.removeItem(DRAFT_STORAGE_KEY);
     } catch (err) {
       console.error(err);
-      addToast({ type: 'error', title: 'Generation failed', message: 'Could not generate captions. Check API logs.' });
+      addToast({ type: 'error', title: 'Generation unavailable', message: 'Could not generate captions right now. Please try again in a moment.' });
     } finally {
       setIsGenerating(false);
     }

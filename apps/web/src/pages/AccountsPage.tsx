@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { ComponentType } from 'react';
+import { NavLink } from 'react-router-dom';
 import {
   AlertTriangle,
   ArrowRight,
@@ -9,6 +10,7 @@ import {
   Cloud,
   Database,
   ExternalLink,
+  Filter,
   Film,
   Globe,
   Image,
@@ -222,6 +224,7 @@ export default function AccountsPage() {
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [query, setQuery] = useState('');
+  const [accountFilter, setAccountFilter] = useState<'all' | 'facebook' | 'instagram' | 'google'>('all');
   const { addToast } = useToast();
 
   useEffect(() => {
@@ -317,6 +320,15 @@ export default function AccountsPage() {
     return haystack.includes(query.trim().toLowerCase());
   });
 
+  const filteredAccounts = accounts.filter((account) => {
+    const normalizedPlatform = account.platform === 'gmb' ? 'google' : account.platform;
+    const matchesPlatform = accountFilter === 'all' || normalizedPlatform === accountFilter;
+    const matchesQuery = `${account.accountName} ${account.accountId} ${account.platform}`
+      .toLowerCase()
+      .includes(query.trim().toLowerCase());
+    return matchesPlatform && matchesQuery;
+  });
+
   return (
     <div className="max-w-7xl mx-auto space-y-8">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
@@ -332,8 +344,8 @@ export default function AccountsPage() {
         </div>
         <div className="grid grid-cols-3 gap-2 min-w-[280px]">
           <div className="rounded-xl bg-white border border-slate-200 px-3 py-2">
-            <p className="text-[10px] font-bold uppercase text-slate-400">Live</p>
-            <p className="text-lg font-extrabold text-slate-900">{SOCIAL_PLATFORMS.filter((p) => p.status === 'live').length}</p>
+            <p className="text-[10px] font-bold uppercase text-slate-400">Connected</p>
+            <p className="text-lg font-extrabold text-slate-900">{accounts.length}/30</p>
           </div>
           <div className="rounded-xl bg-white border border-slate-200 px-3 py-2">
             <p className="text-[10px] font-bold uppercase text-slate-400">Channels</p>
@@ -343,6 +355,13 @@ export default function AccountsPage() {
             <p className="text-[10px] font-bold uppercase text-slate-400">Tools</p>
             <p className="text-lg font-extrabold text-slate-900">{WORKFLOW_INTEGRATIONS.length}</p>
           </div>
+          <NavLink
+            to="/accounts/create"
+            className="col-span-3 inline-flex h-10 items-center justify-center gap-2 rounded-lg bg-blue-600 px-4 text-sm font-bold text-white transition-colors hover:bg-blue-700"
+          >
+            <Globe className="h-4 w-4" />
+            Connect Account
+          </NavLink>
         </div>
       </div>
 
@@ -368,6 +387,10 @@ export default function AccountsPage() {
             <h2 className="text-lg font-extrabold text-slate-950">Social Platforms</h2>
             <p className="text-sm text-slate-500">Live connectors remain actionable; upcoming channels show the product roadmap inside the app.</p>
           </div>
+          <NavLink to="/accounts/create" className="hidden md:inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-bold text-white hover:bg-black">
+            <Globe className="h-4 w-4" />
+            Connect Account
+          </NavLink>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
           {SOCIAL_PLATFORMS.map((platform) => {
@@ -497,17 +520,43 @@ export default function AccountsPage() {
       </section>
 
       <section className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+        <div className="px-5 py-4 border-b border-slate-100 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
           <div>
-            <h2 className="text-base font-extrabold text-slate-900">All Connected Accounts</h2>
-            <p className="text-xs text-slate-500 mt-0.5">Live OAuth accounts returned by the API.</p>
+            <h2 className="text-base font-extrabold text-slate-900">Connected Account Library</h2>
+            <p className="text-xs text-slate-500 mt-0.5">
+              {accounts.length}/30 accounts connected. Search, filter, and manage channel access from one table.
+            </p>
           </div>
-          <button
-            onClick={fetchAccounts}
-            className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-700 px-3 py-1.5 rounded-lg border border-slate-200 hover:bg-slate-50 transition-colors"
-          >
-            <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} /> Refresh
-          </button>
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="relative min-w-[220px]">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search an account"
+                className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+              />
+            </div>
+            <div className="relative">
+              <Filter className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+              <select
+                value={accountFilter}
+                onChange={(event) => setAccountFilter(event.target.value as typeof accountFilter)}
+                className="h-9 rounded-lg border border-slate-200 bg-white pl-8 pr-8 text-sm font-semibold text-slate-600 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-100"
+              >
+                <option value="all">All platforms</option>
+                <option value="facebook">Facebook</option>
+                <option value="instagram">Instagram</option>
+                <option value="google">Google Business</option>
+              </select>
+            </div>
+            <button
+              onClick={fetchAccounts}
+              className="flex h-9 items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-3 text-xs font-semibold text-slate-500 transition-colors hover:bg-slate-50 hover:text-slate-700"
+            >
+              <RefreshCw className={`w-3 h-3 ${loading ? 'animate-spin' : ''}`} /> Refresh
+            </button>
+          </div>
         </div>
 
         {loading ? (
@@ -520,6 +569,15 @@ export default function AccountsPage() {
             <Globe className="w-8 h-8 text-slate-200 mx-auto mb-3" />
             <p className="text-sm font-semibold text-slate-500">No accounts connected yet</p>
             <p className="text-xs text-slate-400 mt-1">Connect Facebook or Google Business above to start publishing from SocialGenie.</p>
+            <NavLink to="/accounts/create" className="mt-4 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-bold text-white hover:bg-blue-700">
+              Connect Account
+            </NavLink>
+          </div>
+        ) : filteredAccounts.length === 0 ? (
+          <div className="px-6 py-10 text-center">
+            <Search className="w-8 h-8 text-slate-200 mx-auto mb-3" />
+            <p className="text-sm font-semibold text-slate-500">No accounts match this filter</p>
+            <p className="text-xs text-slate-400 mt-1">Clear the search or switch back to all platforms.</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -528,13 +586,15 @@ export default function AccountsPage() {
                 <tr className="bg-slate-50 text-left">
                   <th className="px-5 py-3 text-xs font-extrabold text-slate-400 uppercase">Platform</th>
                   <th className="px-5 py-3 text-xs font-extrabold text-slate-400 uppercase">Account Name</th>
+                  <th className="px-5 py-3 text-xs font-extrabold text-slate-400 uppercase">Team Members</th>
+                  <th className="px-5 py-3 text-xs font-extrabold text-slate-400 uppercase">Clients</th>
                   <th className="px-5 py-3 text-xs font-extrabold text-slate-400 uppercase">Account ID</th>
-                  <th className="px-5 py-3 text-xs font-extrabold text-slate-400 uppercase">Connected</th>
+                  <th className="px-5 py-3 text-xs font-extrabold text-slate-400 uppercase">Last Connected By</th>
                   <th className="px-5 py-3 text-xs font-extrabold text-slate-400 uppercase">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {accounts.map((acc) => {
+                {filteredAccounts.map((acc) => {
                   const platformMeta = SOCIAL_PLATFORMS.find((p) => p.id === acc.platform || (p.id === 'google' && acc.platform === 'gmb'));
                   return (
                     <tr key={acc.id} className="hover:bg-slate-50 transition-colors">
@@ -550,9 +610,16 @@ export default function AccountsPage() {
                         </div>
                       </td>
                       <td className="px-5 py-3.5 font-medium text-slate-700">{acc.accountName}</td>
+                      <td className="px-5 py-3.5">
+                        <span className="inline-flex min-w-10 justify-center rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-blue-600">0</span>
+                      </td>
+                      <td className="px-5 py-3.5">
+                        <span className="inline-flex min-w-10 justify-center rounded-full bg-slate-100 px-2 py-1 text-xs font-bold text-blue-600">0</span>
+                      </td>
                       <td className="px-5 py-3.5 text-slate-400 font-mono text-xs">{acc.accountId.slice(0, 16)}...</td>
                       <td className="px-5 py-3.5 text-slate-400 text-xs">
-                        {new Date(acc.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+                        <span className="block font-semibold text-slate-600">Current user</span>
+                        <span>{new Date(acc.createdAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}</span>
                       </td>
                       <td className="px-5 py-3.5">
                         <button

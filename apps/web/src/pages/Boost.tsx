@@ -394,7 +394,7 @@ export default function BoostPage() {
           { label: 'Total Spend This Month', value: `₹${totalSpentThisMonth.toLocaleString('en-IN')}`, sub: `across ${campaigns.length} campaigns`, icon: '💸' },
           { label: 'Total Reach', value: totalReachThisMonth.toLocaleString('en-IN'), sub: 'people reached', icon: '📡' },
           { label: 'Total Clicks', value: totalClicksThisMonth.toLocaleString('en-IN'), sub: 'link clicks', icon: '👆' },
-          { label: 'Avg CTR', value: `${((totalClicksThisMonth / totalReachThisMonth) * 100).toFixed(1)}%`, sub: 'click-through rate', icon: '📊' },
+          { label: 'Avg CTR', value: totalReachThisMonth > 0 ? `${((totalClicksThisMonth / totalReachThisMonth) * 100).toFixed(1)}%` : '—', sub: 'click-through rate', icon: '📊' },
         ].map((s) => (
           <div key={s.label} className="bg-white rounded-xl border border-gray-100 shadow-sm p-5">
             <div className="text-2xl mb-1">{s.icon}</div>

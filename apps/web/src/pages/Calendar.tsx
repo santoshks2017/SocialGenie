@@ -213,7 +213,7 @@ export default function CalendarPage() {
                   <div className="p-1.5 space-y-1.5">
                     {posts.map((post) => <PostCard key={post.id} post={post} />)}
                     <NavLink
-                      to={`/create?date=${date.toISOString().split('T')[0]}`}
+                      to={`/create?date=${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`}
                       className="w-full flex items-center justify-center gap-1 py-2 rounded-lg border border-dashed border-gray-200 text-gray-400 hover:border-blue-300 hover:text-blue-500 transition-colors text-xs"
                     >
                       <Plus className="w-3.5 h-3.5" />

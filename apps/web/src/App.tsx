@@ -20,6 +20,7 @@ import SettingsPage from './pages/SettingsPage';
 import AuthCallbackPage from './pages/AuthCallbackPage';
 import ConnectProfilesPage from './pages/ConnectProfilesPage';
 import AccountsPage from './pages/AccountsPage';
+import ConnectAccountPage from './pages/ConnectAccountPage';
 import type { UserInfo } from './lib/permissions';
 
 // ─── Nav config ───────────────────────────────────────────────────────────────
@@ -277,7 +278,9 @@ function SuggestedPostCard({ data }: { data: DashboardData | null }) {
   const dateStr = (festival ? new Date(festival.date) : new Date())
     .toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'short' });
   const postType = festival ? 'festival' : 'promotional';
-  const createUrl = `/create?prompt=${encodeURIComponent(title)}&postType=${encodeURIComponent(postType)}`;
+  // Pass the full caption as the prompt so CreatePost pre-fills the description field
+  const fullPrompt = `${title}\n\n${caption}\n\n${hashtags.join(' ')}`;
+  const createUrl = `/create?prompt=${encodeURIComponent(fullPrompt)}&postType=${encodeURIComponent(postType)}`;
 
   return (
     <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm">
@@ -333,7 +336,7 @@ function SuggestedPostCard({ data }: { data: DashboardData | null }) {
 }
 
 function InboxPreview({ stats }: { stats?: DashboardData['stats'] }) {
-  const pendingCount = stats?.inboxPending ?? 4;
+  const pendingCount = stats?.inboxPending ?? 0;
   return (
     <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden shadow-sm">
       <div className="px-5 py-3.5 flex items-center justify-between border-b border-slate-50">
@@ -622,6 +625,7 @@ function AppRoutes() {
       <Route path="/analytics" element={<RequireAuth><AppLayout><AnalyticsPage /></AppLayout></RequireAuth>} />
       <Route path="/boost" element={<RequireAuth><AppLayout><BoostPage /></AppLayout></RequireAuth>} />
       <Route path="/accounts" element={<RequireAuth><AppLayout><AccountsPage /></AppLayout></RequireAuth>} />
+      <Route path="/accounts/create" element={<RequireAuth><AppLayout><ConnectAccountPage /></AppLayout></RequireAuth>} />
       <Route path="/settings" element={<RequireAuth><AppLayout><SettingsPage /></AppLayout></RequireAuth>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

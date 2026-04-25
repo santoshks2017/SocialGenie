@@ -419,10 +419,11 @@ export default async function authRoutes(fastify: FastifyInstance) {
   fastify.get('/facebook', async (request, reply) => {
     const META_APP_ID = process.env['META_APP_ID'];
     const META_REDIRECT_URI = process.env['META_REDIRECT_URI'];
+    const FRONTEND_URL = process.env['FRONTEND_URL'] ?? 'https://social-genie-web.vercel.app';
 
     if (!META_APP_ID || !META_REDIRECT_URI) {
       fastify.log.error('[FB OAuth] Missing META_APP_ID or META_REDIRECT_URI');
-      return reply.code(500).send({ error: 'Facebook OAuth not configured on server' });
+      return reply.redirect(`${FRONTEND_URL}/accounts?error=server_config&platform=facebook`);
     }
 
     const { access_token } = request.query as { access_token?: string };
@@ -546,10 +547,11 @@ export default async function authRoutes(fastify: FastifyInstance) {
   fastify.get('/google', async (request, reply) => {
     const GOOGLE_CLIENT_ID = process.env['GOOGLE_CLIENT_ID'];
     const GOOGLE_REDIRECT_URI = process.env['GOOGLE_REDIRECT_URI'];
+    const FRONTEND_URL = process.env['FRONTEND_URL'] ?? 'https://social-genie-web.vercel.app';
 
     if (!GOOGLE_CLIENT_ID || !GOOGLE_REDIRECT_URI) {
       fastify.log.error('[Google OAuth] Missing GOOGLE_CLIENT_ID or GOOGLE_REDIRECT_URI');
-      return reply.code(500).send({ error: 'Google OAuth not configured on server' });
+      return reply.redirect(`${FRONTEND_URL}/accounts?error=server_config&platform=google`);
     }
 
     const { access_token } = request.query as { access_token?: string };
