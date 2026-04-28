@@ -24,8 +24,8 @@ export interface BoostCampaign {
 export interface TargetingSpec {
   location: {
     city: string;
-    latitude: number;
-    longitude: number;
+    latitude?: number;
+    longitude?: number;
     radius: number;
   };
   ageMin: number;

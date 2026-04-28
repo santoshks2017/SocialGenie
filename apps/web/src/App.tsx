@@ -2,7 +2,7 @@ import { BrowserRouter as Router, Routes, Route, NavLink, Navigate, useNavigate,
 import {
   Car, Plus, MessageSquare, Bell,
   Calendar, BarChart2, Package, Zap, Settings, Link2,
-  ChevronRight, RefreshCw, Star, Check, Sparkles,
+  ChevronRight, Send, RefreshCw, Check, Sparkles,
   LayoutDashboard, Video, LogOut, Menu, X, LayoutList,
 } from 'lucide-react';
 import React, { useState, useEffect } from 'react';

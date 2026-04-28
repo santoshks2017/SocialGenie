@@ -55,7 +55,6 @@ function PostImage({ imageUrl, isGenerating, promptText, selectedDesign, square 
 // ─── Facebook ─────────────────────────────────────────────────────────────────
 function FacebookPreview({ dealerName, dealerInitials, caption, imageUrl, isGenerating, promptText, selectedDesign }: Omit<PlatformPreviewProps, 'platform'>) {
   const truncated = caption.length > 120 ? caption.slice(0, 120) + '…' : caption;
-  const igHandle = dealerName.toLowerCase().replace(/\s+/g, '').replace(/[^a-z0-9_.]/g, '');
 
   return (
     <div className="flex-1 overflow-y-auto" style={{ background: '#f0f2f5' }}>
