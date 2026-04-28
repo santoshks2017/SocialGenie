@@ -27,10 +27,11 @@ export async function generateCaptions(
   inventory?: InventoryContext,
   inspirationPosts?: string[],
   postType?: string,
+  includeHindi = false,
 ): Promise<GeneratedCaptions> {
   const groq = getClient();
 
-  const systemPrompt = buildEnrichedSystemPrompt(dealer.city, dealer.brands ?? [], postType);
+  const systemPrompt = buildEnrichedSystemPrompt(dealer.city, dealer.brands ?? [], postType, includeHindi);
 
   const vehicleBlock = inventory
     ? `VEHICLE: ${inventory.make ?? ''} ${inventory.model ?? ''} ${inventory.variant ?? ''} | Price: ${inventory.price ? `₹${(inventory.price / 100000).toFixed(2)} Lakhs` : 'not provided — omit pricing'} | Stock: ${inventory.stock_count ?? 'available'}`
@@ -44,7 +45,7 @@ export async function generateCaptions(
 ${vehicleBlock}
 POST REQUEST: "${prompt}"${inspirationBlock}
 
-Generate 3 caption variants as JSON.`;
+Generate 3 caption variants as JSON.${includeHindi ? ' Include hindi_variants.' : ''}`;
 
   const response = await groq.chat.completions.create({
     model: GROQ_MODEL,
@@ -53,14 +54,14 @@ Generate 3 caption variants as JSON.`;
       { role: 'user', content: userMessage },
     ],
     temperature: 0.85,
-    max_tokens: 1800,
+    max_tokens: includeHindi ? 2600 : 1800,
     response_format: { type: 'json_object' },
   });
 
   const content = response.choices[0]?.message?.content;
   if (!content) throw new Error('Empty response from Groq');
 
-  const parsed = JSON.parse(content) as { variants?: unknown[] };
+  const parsed = JSON.parse(content) as { variants?: unknown[]; hindi_variants?: unknown[] };
   if (!Array.isArray(parsed.variants) || parsed.variants.length < 1) {
     throw new Error('Invalid caption structure from Groq');
   }
@@ -79,7 +80,19 @@ Generate 3 caption variants as JSON.`;
 
   while (variants.length < 3) variants.push({ ...variants[0]!, style: styles[variants.length] ?? 'punchy' });
 
-  return { variants: variants as [CaptionVariant, CaptionVariant, CaptionVariant] };
+  let hindi_variants: [string, string, string] | undefined;
+  if (includeHindi && Array.isArray(parsed.hindi_variants) && parsed.hindi_variants.length >= 3) {
+    hindi_variants = [
+      String(parsed.hindi_variants[0] ?? ''),
+      String(parsed.hindi_variants[1] ?? ''),
+      String(parsed.hindi_variants[2] ?? ''),
+    ];
+  }
+
+  return {
+    variants: variants as [CaptionVariant, CaptionVariant, CaptionVariant],
+    ...(hindi_variants ? { hindi_variants } : {}),
+  };
 }
 
 export async function generateInboxReply(
@@ -112,6 +125,23 @@ export async function generateInboxReply(
   } catch {
     return content.trim();
   }
+}
+
+export async function transformCaption(caption: string, instruction: string): Promise<string> {
+  const groq = getClient();
+  const response = await groq.chat.completions.create({
+    model: GROQ_MODEL,
+    messages: [
+      {
+        role: 'system',
+        content: 'You are a social media copywriter for Indian automobile dealerships. Apply the given transformation to the caption and return ONLY the transformed text, no explanation, no markdown, no quotes.',
+      },
+      { role: 'user', content: `CAPTION:\n${caption}\n\nTRANSFORMATION: ${instruction}` },
+    ],
+    temperature: 0.7,
+    max_tokens: 600,
+  });
+  return response.choices[0]?.message?.content?.trim() ?? caption;
 }
 
 export function isGroqAvailable(): boolean {

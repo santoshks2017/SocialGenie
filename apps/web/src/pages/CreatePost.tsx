@@ -9,6 +9,7 @@ import {
   Tag, Sparkles, Heart, Gift, PenLine,
   ArrowLeft, RefreshCw, Check, ImagePlus, Video, X,
   Send, Download, Zap, Globe, Calendar, Film, Clock, Wand2,
+  Languages, Minimize2, Hash, ChevronDown,
 } from 'lucide-react';
 import api from '../services/api';
 
@@ -144,6 +145,11 @@ export default function CreatePost() {
   const [isGeneratingImages, setIsGeneratingImages] = useState(false);
   const [imageLoadingStates, setImageLoadingStates] = useState<boolean[]>([false, false, false]);
   const [connectedAccounts, setConnectedAccounts] = useState<string[]>([]);
+
+  // Post-generation toolbar states
+  const [isTransforming, setIsTransforming] = useState(false);
+  const [showRephraseMenu, setShowRephraseMenu] = useState(false);
+  const [showTranslateMenu, setShowTranslateMenu] = useState(false);
 
   // URL Generation states
   const [sourceUrl, setSourceUrl] = useState('');
@@ -542,6 +548,53 @@ export default function CreatePost() {
       addToast({ type: 'error', title: 'Video generation failed', message: 'Could not generate video. Please try again.' });
     } finally {
       setGeneratingVideo(false);
+    }
+  };
+
+  const handleRephrase = async (tone?: string) => {
+    if (!caption.trim() || isTransforming) return;
+    setShowRephraseMenu(false);
+    setIsTransforming(true);
+    try {
+      const res = await api.post<{ success: boolean; caption: string }>('/creatives/rephrase', { caption, tone });
+      setCaption(res.caption);
+    } catch {
+      addToast({ type: 'error', title: 'Rephrase failed', message: 'Could not rephrase. Please try again.' });
+    } finally {
+      setIsTransforming(false);
+    }
+  };
+
+  const handleTranslate = async (to: string) => {
+    if (!caption.trim() || isTransforming) return;
+    setShowTranslateMenu(false);
+    setIsTransforming(true);
+    try {
+      const res = await api.post<{ success: boolean; caption: string }>('/creatives/translate', { caption, to });
+      setCaption(res.caption);
+    } catch {
+      addToast({ type: 'error', title: 'Translation failed', message: 'Could not translate. Please try again.' });
+    } finally {
+      setIsTransforming(false);
+    }
+  };
+
+  const handleMoreHashtags = async () => {
+    if (!caption.trim() || isTransforming) return;
+    setIsTransforming(true);
+    try {
+      const cap = variants?.captions[selectedVariant];
+      const res = await api.post<{ success: boolean; hashtags: string[] }>('/creatives/hashtags', {
+        caption,
+        brand: cap?.hashtags?.find((h) => h.startsWith('#')) ?? undefined,
+      });
+      if (res.hashtags.length > 0) {
+        setCaption((prev) => `${prev}\n\n${res.hashtags.join(' ')}`);
+      }
+    } catch {
+      addToast({ type: 'error', title: 'Hashtag generation failed', message: 'Could not generate hashtags. Please try again.' });
+    } finally {
+      setIsTransforming(false);
     }
   };
 
@@ -1126,6 +1179,105 @@ export default function CreatePost() {
                       </span>
                     </div>
                   </div>
+
+                  {/* Post-generation toolbar */}
+                  {caption && (
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {/* Rephrase with tone dropdown */}
+                      <div className="relative">
+                        <button
+                          onClick={() => { setShowRephraseMenu((v) => !v); setShowTranslateMenu(false); }}
+                          disabled={isTransforming}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-stone-100 text-stone-700 hover:bg-stone-200 disabled:opacity-50 transition-colors"
+                        >
+                          <Wand2 className="w-3.5 h-3.5" />
+                          Rephrase
+                          <ChevronDown className="w-3 h-3" />
+                        </button>
+                        {showRephraseMenu && (
+                          <div className="absolute top-full left-0 mt-1 bg-white border border-stone-200 rounded-xl shadow-lg z-20 py-1 min-w-[140px]">
+                            {[
+                              { id: 'punchy', label: 'Punchy' },
+                              { id: 'detailed', label: 'Detailed' },
+                              { id: 'emotional', label: 'Emotional' },
+                              { id: 'shorter', label: 'Shorter' },
+                              { id: 'formal', label: 'Formal' },
+                              { id: 'casual', label: 'Casual' },
+                            ].map((t) => (
+                              <button
+                                key={t.id}
+                                onClick={() => handleRephrase(t.id)}
+                                className="w-full text-left px-4 py-2 text-xs font-medium text-stone-700 hover:bg-stone-50"
+                              >
+                                {t.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Shorten */}
+                      <button
+                        onClick={() => handleRephrase('shorter')}
+                        disabled={isTransforming}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-stone-100 text-stone-700 hover:bg-stone-200 disabled:opacity-50 transition-colors"
+                      >
+                        <Minimize2 className="w-3.5 h-3.5" />
+                        Shorten
+                      </button>
+
+                      {/* Translate dropdown */}
+                      <div className="relative">
+                        <button
+                          onClick={() => { setShowTranslateMenu((v) => !v); setShowRephraseMenu(false); }}
+                          disabled={isTransforming}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-stone-100 text-stone-700 hover:bg-stone-200 disabled:opacity-50 transition-colors"
+                        >
+                          <Languages className="w-3.5 h-3.5" />
+                          Translate
+                          <ChevronDown className="w-3 h-3" />
+                        </button>
+                        {showTranslateMenu && (
+                          <div className="absolute top-full left-0 mt-1 bg-white border border-stone-200 rounded-xl shadow-lg z-20 py-1 min-w-[150px]">
+                            {[
+                              { id: 'hi', label: 'Hindi' },
+                              { id: 'mr', label: 'Marathi' },
+                              { id: 'ta', label: 'Tamil' },
+                              { id: 'te', label: 'Telugu' },
+                              { id: 'kn', label: 'Kannada' },
+                              { id: 'gu', label: 'Gujarati' },
+                              { id: 'bn', label: 'Bengali' },
+                              { id: 'en', label: 'English' },
+                            ].map((l) => (
+                              <button
+                                key={l.id}
+                                onClick={() => handleTranslate(l.id)}
+                                className="w-full text-left px-4 py-2 text-xs font-medium text-stone-700 hover:bg-stone-50"
+                              >
+                                {l.label}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* More hashtags */}
+                      <button
+                        onClick={handleMoreHashtags}
+                        disabled={isTransforming}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-stone-100 text-stone-700 hover:bg-stone-200 disabled:opacity-50 transition-colors"
+                      >
+                        <Hash className="w-3.5 h-3.5" />
+                        Hashtags
+                      </button>
+
+                      {isTransforming && (
+                        <span className="flex items-center gap-1.5 text-xs text-stone-400 ml-1">
+                          <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Working…
+                        </span>
+                      )}
+                    </div>
+                  )}
 
                   {/* Hashtags */}
                   {currentVariant && currentVariant.hashtags.length > 0 && (

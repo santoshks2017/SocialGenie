@@ -9,10 +9,12 @@ import { prisma } from "../db/prisma.js"
 import { generateCaptions as openaiGenerateCaptions } from "../services/openai.js"
 import {
   generateCaptions as groqGenerateCaptions,
+  transformCaption as groqTransformCaption,
   isGroqAvailable,
 } from "../services/groq.js"
 import {
   generateCaptions as openrouterGenerateCaptions,
+  transformCaption as openrouterTransformCaption,
   isOpenRouterAvailable,
 } from "../services/openrouter.js"
 import {
@@ -77,7 +79,7 @@ async function generateCaptionsAI(
   // 1. Try Groq (primary)
   if (isGroqAvailable()) {
     try {
-      return await groqGenerateCaptions(prompt, dealerContext, inventoryContext, inspirationPosts, postType)
+      return await groqGenerateCaptions(prompt, dealerContext, inventoryContext, inspirationPosts, postType, includeHindi)
     } catch (err) {
       console.error("Groq generation failed, falling back to OpenRouter:", err)
     }
@@ -92,6 +94,7 @@ async function generateCaptionsAI(
         inventoryContext,
         inspirationPosts,
         postType,
+        includeHindi,
       )
     } catch (err) {
       console.error("OpenRouter generation failed, falling back to mock:", err)
@@ -131,6 +134,20 @@ async function generateCaptionsAI(
       },
     ],
   }
+}
+
+async function transformCaptionAI(caption: string, instruction: string): Promise<string> {
+  if (isGroqAvailable()) {
+    try { return await groqTransformCaption(caption, instruction) } catch (err) {
+      console.error("Groq transform failed, falling back to OpenRouter:", err)
+    }
+  }
+  if (isOpenRouterAvailable()) {
+    try { return await openrouterTransformCaption(caption, instruction) } catch (err) {
+      console.error("OpenRouter transform failed:", err)
+    }
+  }
+  return caption
 }
 
 export default async function creativeRoutes(fastify: FastifyInstance) {
@@ -518,6 +535,81 @@ export default async function creativeRoutes(fastify: FastifyInstance) {
       }
     },
   )
+
+  // POST /v1/creatives/rephrase
+  fastify.post("/rephrase", { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const { caption, tone } = request.body as { caption: string; tone?: string }
+    if (!caption?.trim()) {
+      return reply.code(400).send({ error: { code: "INVALID_INPUT", message: "caption is required" } })
+    }
+    const toneMap: Record<string, string> = {
+      punchy: "Rewrite as a short punchy post under 60 words. Keep the core message.",
+      detailed: "Rewrite with more detail and benefits, 100-150 words. Keep brand voice.",
+      emotional: "Rewrite with emotional storytelling tone, 70-100 words. Focus on aspirations.",
+      shorter: "Shorten to under 40 words without losing the CTA.",
+      formal: "Rewrite in a professional, formal tone.",
+      casual: "Rewrite in a friendly, casual, conversational tone.",
+    }
+    const instruction = toneMap[tone ?? ''] ?? "Rephrase this caption in a fresh way while keeping the same meaning and CTA."
+    try {
+      const result = await transformCaptionAI(caption, instruction)
+      return { success: true, caption: result }
+    } catch (err) {
+      fastify.log.error(err, "Rephrase failed")
+      return reply.code(500).send({ error: { code: "AI_ERROR", message: "Rephrase failed. Please try again." } })
+    }
+  })
+
+  // POST /v1/creatives/translate
+  fastify.post("/translate", { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const { caption, to } = request.body as { caption: string; to: string }
+    if (!caption?.trim() || !to?.trim()) {
+      return reply.code(400).send({ error: { code: "INVALID_INPUT", message: "caption and to are required" } })
+    }
+    const langMap: Record<string, string> = {
+      hi: "Hindi (Devanagari script)",
+      mr: "Marathi (Devanagari script)",
+      ta: "Tamil (Tamil script)",
+      te: "Telugu (Telugu script)",
+      kn: "Kannada (Kannada script)",
+      gu: "Gujarati (Gujarati script)",
+      bn: "Bengali (Bengali script)",
+      en: "English",
+    }
+    const targetLang = langMap[to] ?? to
+    const instruction = `Translate this caption to ${targetLang}. Preserve all phone numbers, hashtags, and emojis as-is. Return only the translated caption.`
+    try {
+      const result = await transformCaptionAI(caption, instruction)
+      return { success: true, caption: result }
+    } catch (err) {
+      fastify.log.error(err, "Translation failed")
+      return reply.code(500).send({ error: { code: "AI_ERROR", message: "Translation failed. Please try again." } })
+    }
+  })
+
+  // POST /v1/creatives/hashtags
+  fastify.post("/hashtags", { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const { caption, brand, city } = request.body as { caption: string; brand?: string; city?: string }
+    if (!caption?.trim()) {
+      return reply.code(400).send({ error: { code: "INVALID_INPUT", message: "caption is required" } })
+    }
+    const context = [brand && `Brand: ${brand}`, city && `City: ${city}`].filter(Boolean).join(", ")
+    const instruction = `Generate 15 highly relevant hashtags for this Indian automobile dealer caption.${context ? ` Context: ${context}.` : ""} Include: city hashtags, brand hashtags, model hashtags (if mentioned), and engagement hashtags. Return ONLY a JSON array of hashtag strings, e.g. ["#tag1","#tag2"]. No other text.`
+    try {
+      const result = await transformCaptionAI(caption, instruction)
+      let hashtags: string[] = []
+      try {
+        const parsed = JSON.parse(result) as unknown
+        if (Array.isArray(parsed)) hashtags = (parsed as string[]).filter((h) => typeof h === 'string')
+      } catch {
+        hashtags = result.match(/#\w+/g) ?? []
+      }
+      return { success: true, hashtags }
+    } catch (err) {
+      fastify.log.error(err, "Hashtag generation failed")
+      return reply.code(500).send({ error: { code: "AI_ERROR", message: "Hashtag generation failed. Please try again." } })
+    }
+  })
 
   // GET /v1/creatives/prompts
   fastify.get("/prompts", async (request, _reply) => {

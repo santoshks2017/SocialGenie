@@ -443,6 +443,7 @@ export function buildEnrichedSystemPrompt(
   city: string,
   brands: string[],
   postType?: string,
+  includeHindi = false,
 ): string {
   const regionKey = detectRegion(city);
   const region = REGIONS[regionKey];
@@ -478,7 +479,7 @@ Proven CTAs: ${postPattern.cta_patterns.join(' | ')}
 4. Use Hindi/regional phrases only where natural — not forced.
 5. Punchy variant: < 60 words. Detailed: 100-150 words. Emotional: 70-100 words.
 6. Each variant must open with a DIFFERENT first line — no repetition.
-7. Hashtags must include city + brand + model (if known) + post type.
+7. Hashtags must include city + brand + model (if known) + post type.${includeHindi ? '\n8. Include "hindi_variants": array of 3 strings — Hindi translation of each variant. Pure Hindi script (Devanagari), no transliteration.' : ''}
 
 OUTPUT: Valid JSON only, no markdown fences.
 {
@@ -486,6 +487,6 @@ OUTPUT: Valid JSON only, no markdown fences.
     { "caption_text": "...", "hashtags": ["#tag"], "suggested_emoji": ["🚗"], "platform_notes": "Best for Instagram Stories", "style": "punchy" },
     { "caption_text": "...", "hashtags": ["#tag"], "suggested_emoji": ["✨"], "platform_notes": "Best for Facebook", "style": "detailed" },
     { "caption_text": "...", "hashtags": ["#tag"], "suggested_emoji": ["❤️"], "platform_notes": "Best for Instagram Feed", "style": "emotional" }
-  ]
+  ]${includeHindi ? ',\n  "hindi_variants": ["<variant 1 in Hindi>", "<variant 2 in Hindi>", "<variant 3 in Hindi>"]' : ''}
 }`;
 }
