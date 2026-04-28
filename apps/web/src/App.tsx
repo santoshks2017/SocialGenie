@@ -3,7 +3,7 @@ import {
   Car, Plus, MessageSquare, Bell,
   Calendar, BarChart2, Package, Zap, Settings, Link2,
   ChevronRight, Send, RefreshCw, Star, Check, Sparkles,
-  LayoutDashboard, Video, LogOut, Menu, X,
+  LayoutDashboard, Video, LogOut, Menu, X, LayoutList,
 } from 'lucide-react';
 import React, { useState, useEffect } from 'react';
 import api from './services/api';
@@ -22,11 +22,13 @@ import ConnectProfilesPage from './pages/ConnectProfilesPage';
 import AccountsPage from './pages/AccountsPage';
 import ConnectAccountPage from './pages/ConnectAccountPage';
 import OAuthCallbackPage from './pages/OAuthCallbackPage';
+import PostsPage from './pages/PostsPage';
 import type { UserInfo } from './lib/permissions';
 
 // ─── Nav config ───────────────────────────────────────────────────────────────
 const NAV_ITEMS = [
   { to: '/',          icon: LayoutDashboard, label: 'Dashboard',  exact: true },
+  { to: '/posts',     icon: LayoutList,      label: 'Posts'                  },
   { to: '/calendar',  icon: Calendar,        label: 'Calendar'               },
   { to: '/analytics', icon: BarChart2,       label: 'Analytics'              },
   { to: '/inbox',     icon: MessageSquare,   label: 'Inbox'                  },
@@ -621,6 +623,7 @@ function AppRoutes() {
       <Route path="/onboarding" element={<RequireAuth><ConnectProfilesPage /></RequireAuth>} />
       <Route path="/" element={<RequireAuth><AppLayout><Dashboard /></AppLayout></RequireAuth>} />
       <Route path="/create" element={<RequireAuth><AppLayout fullBleed><CreatePost /></AppLayout></RequireAuth>} />
+      <Route path="/posts"    element={<RequireAuth><AppLayout><PostsPage /></AppLayout></RequireAuth>} />
       <Route path="/calendar" element={<RequireAuth><AppLayout><CalendarPage /></AppLayout></RequireAuth>} />
       <Route path="/inbox" element={<RequireAuth><AppLayout><InboxPage /></AppLayout></RequireAuth>} />
       <Route path="/inventory" element={<RequireAuth><AppLayout><InventoryPage /></AppLayout></RequireAuth>} />
