@@ -1,16 +1,29 @@
 import { Queue } from 'bullmq';
 
-const redisConnection = {
-  host: (process.env['REDIS_URL'] ?? 'redis://localhost:6379').replace('redis://', '').split(':')[0] ?? 'localhost',
-  port: parseInt((process.env['REDIS_URL'] ?? 'redis://localhost:6379').split(':')[2] ?? '6379'),
-};
+const REDIS_URL = process.env['REDIS_URL'];
+const IS_VERCEL = process.env['VERCEL'] === '1';
+
+// Only create queues if Redis is configured and we're not on Vercel serverless
+// (Vercel has no persistent process to drain queues — cron handles scheduled jobs instead)
+const hasRedis = !IS_VERCEL && !!REDIS_URL;
+
+export const redisConnection = hasRedis
+  ? {
+      host: REDIS_URL!.replace(/^redis:\/\//, '').split(':')[0] ?? 'localhost',
+      port: parseInt(REDIS_URL!.split(':')[2] ?? '6379'),
+    }
+  : { host: 'localhost', port: 6379 };
+
+export function isQueueAvailable(): boolean {
+  return hasRedis;
+}
 
 // ─── Queues ────────────────────────────────────────────────────────────────────
 
-export const publishQueue = new Queue('publish', { connection: redisConnection });
-export const metricsQueue = new Queue('metrics', { connection: redisConnection });
-export const inboxPollQueue = new Queue('inbox-poll', { connection: redisConnection });
-export const captionQueue = new Queue('caption', { connection: redisConnection });
+export const publishQueue = hasRedis ? new Queue('publish', { connection: redisConnection }) : null;
+export const metricsQueue = hasRedis ? new Queue('metrics', { connection: redisConnection }) : null;
+export const inboxPollQueue = hasRedis ? new Queue('inbox-poll', { connection: redisConnection }) : null;
+export const captionQueue = hasRedis ? new Queue('caption', { connection: redisConnection }) : null;
 
 // ─── Job type definitions ──────────────────────────────────────────────────────
 
@@ -65,4 +78,3 @@ export interface CaptionJobData {
   };
 }
 
-export { redisConnection };

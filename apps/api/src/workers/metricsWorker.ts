@@ -1,7 +1,7 @@
 import { Worker, type Job } from 'bullmq';
 import { type Prisma } from '../generated/client/index.js';
 import { prisma } from '../db/prisma.js';
-import { redisConnection, metricsQueue, type MetricsJobData } from '../queues/index.js';
+import { redisConnection, metricsQueue, isQueueAvailable, type MetricsJobData } from '../queues/index.js';
 import { fetchFacebookPostMetrics, fetchInstagramPostMetrics } from '../services/meta.js';
 import { fetchGmbPostMetrics } from '../services/gmb.js';
 
@@ -66,6 +66,7 @@ export async function scheduleMetricsPolling(
 
   const baseJob = { post_id: postId, dealer_id: dealerId, platform, platform_post_id: platformPostId, access_token: accessToken };
 
+  if (!isQueueAvailable() || !metricsQueue) return;
   // Poll every 6h for first 7 days (28 jobs), then daily for 30 days (30 jobs)
   for (let i = 1; i <= 28; i++) {
     await metricsQueue.add(`metrics-${postId}-${platform}-${i}h`, baseJob, { delay: i * SIX_HOURS - now % SIX_HOURS });

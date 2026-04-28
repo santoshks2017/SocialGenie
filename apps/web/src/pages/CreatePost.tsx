@@ -1485,40 +1485,81 @@ export default function CreatePost() {
       </div>
 
       {/* Schedule Modal */}
-      {showScheduleModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
-            <h3 className="text-lg font-extrabold text-stone-900">Schedule Post</h3>
-            <div>
-              <label className="block text-sm font-semibold text-stone-700 mb-1">Date &amp; Time</label>
-              <input
-                type="datetime-local"
-                className="w-full border border-stone-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-orange-400 focus:outline-none"
-                value={scheduleTime}
-                onChange={(e) => setScheduleTime(e.target.value)}
-              />
-            </div>
-            <div className="bg-orange-50 border border-orange-100 rounded-xl p-3 text-xs text-orange-700">
-              <strong>Best time:</strong> Tomorrow, 9:00 AM — based on your audience engagement patterns
-            </div>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setShowScheduleModal(false)}
-                className="flex-1 py-2.5 text-sm font-semibold text-stone-700 border border-stone-200 rounded-xl hover:bg-stone-50 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmSchedule}
-                disabled={isPublishing || !scheduleTime}
-                className="flex-1 py-2.5 text-sm font-bold bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white rounded-xl transition-colors"
-              >
-                {isPublishing ? 'Scheduling…' : 'Confirm'}
-              </button>
+      {showScheduleModal && (() => {
+        const now = new Date();
+        const minDateTime = now.toISOString().slice(0, 16);
+        const quickPicks = [
+          { label: 'Today 9 AM',    value: (() => { const d = new Date(now); d.setHours(9, 0, 0, 0); return d; })() },
+          { label: 'Today 12 PM',   value: (() => { const d = new Date(now); d.setHours(12, 0, 0, 0); return d; })() },
+          { label: 'Today 6 PM',    value: (() => { const d = new Date(now); d.setHours(18, 0, 0, 0); return d; })() },
+          { label: 'Tomorrow 9 AM', value: (() => { const d = new Date(now); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); return d; })() },
+          { label: 'Tomorrow 6 PM', value: (() => { const d = new Date(now); d.setDate(d.getDate() + 1); d.setHours(18, 0, 0, 0); return d; })() },
+        ].filter((q) => q.value > now);
+        const toLocal = (d: Date) => {
+          const off = d.getTimezoneOffset();
+          return new Date(d.getTime() - off * 60_000).toISOString().slice(0, 16);
+        };
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+            <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6 space-y-4">
+              <h3 className="text-lg font-extrabold text-stone-900">Schedule Post</h3>
+
+              {/* Quick-pick time buttons */}
+              <div>
+                <p className="text-xs font-bold text-stone-500 uppercase tracking-widest mb-2">Quick picks</p>
+                <div className="flex flex-wrap gap-2">
+                  {quickPicks.map((q) => (
+                    <button
+                      key={q.label}
+                      onClick={() => setScheduleTime(toLocal(q.value))}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold border transition-colors ${
+                        scheduleTime === toLocal(q.value)
+                          ? 'bg-orange-600 text-white border-orange-600'
+                          : 'bg-stone-50 text-stone-700 border-stone-200 hover:border-orange-300 hover:text-orange-600'
+                      }`}
+                    >
+                      {q.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-stone-700 mb-1">Custom Date &amp; Time</label>
+                <input
+                  type="datetime-local"
+                  min={minDateTime}
+                  className="w-full border border-stone-200 rounded-xl p-3 text-sm focus:ring-2 focus:ring-orange-400 focus:outline-none"
+                  value={scheduleTime}
+                  onChange={(e) => setScheduleTime(e.target.value)}
+                />
+              </div>
+
+              {scheduleTime && (
+                <div className="bg-orange-50 border border-orange-100 rounded-xl p-3 text-xs text-orange-700">
+                  Will be published on <strong>{new Date(scheduleTime).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</strong> to {selectedPlatforms.join(', ')}
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowScheduleModal(false)}
+                  className="flex-1 py-2.5 text-sm font-semibold text-stone-700 border border-stone-200 rounded-xl hover:bg-stone-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={confirmSchedule}
+                  disabled={isPublishing || !scheduleTime}
+                  className="flex-1 py-2.5 text-sm font-bold bg-orange-600 hover:bg-orange-700 disabled:opacity-50 text-white rounded-xl transition-colors"
+                >
+                  {isPublishing ? 'Scheduling…' : 'Confirm Schedule'}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

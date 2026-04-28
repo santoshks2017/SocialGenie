@@ -154,6 +154,9 @@ export const postService = {
   
   schedule: (id: string, platforms: string[], scheduled_at: string) =>
     api.post<{ item: Post, job_ids: string[] }>('/publisher/publish', { post_id: id, platforms, scheduled_at }),
+
+  reschedule: (id: string, scheduled_at: string) =>
+    api.patch<{ success: boolean; item: Post }>(`/publisher/posts/${id}/reschedule`, { scheduled_at }),
   
   getCalendar: (startDate: string, endDate: string) =>
     api.get<{ data: Post[] }>('/publisher/calendar', { from: startDate, to: endDate }),

@@ -1,7 +1,8 @@
 import type { FastifyInstance } from "fastify"
 import { prisma } from "../db/prisma.js"
-import { publishQueue } from "../queues/index.js"
+import { publishQueue, isQueueAvailable } from "../queues/index.js"
 import type { PublishJobData } from "../queues/index.js"
+import { publishPostToPlatform } from "../lib/publishDirect.js"
 
 export default async function publisherRoutes(fastify: FastifyInstance) {
   // POST /v1/publisher/posts — create a draft post
@@ -155,6 +156,37 @@ export default async function publisherRoutes(fastify: FastifyInstance) {
     },
   )
 
+  // PATCH /v1/publisher/posts/:id/reschedule — change scheduled_at for a pending post
+  fastify.patch(
+    "/posts/:id/reschedule",
+    { preHandler: [fastify.authenticate] },
+    async (request, reply) => {
+      const dealer_id = request.user.dealer_id!
+      const { id } = request.params as { id: string }
+      const { scheduled_at } = request.body as { scheduled_at: string }
+      if (!scheduled_at) {
+        return reply.code(400).send({ error: { code: "INVALID_INPUT", message: "scheduled_at is required" } })
+      }
+      const post = await prisma.post.findFirst({ where: { id, dealer_id } })
+      if (!post) return reply.code(404).send({ error: { code: "NOT_FOUND", message: "Post not found" } })
+      if (post.status === "published") {
+        return reply.code(400).send({ error: { code: "ALREADY_PUBLISHED", message: "Cannot reschedule a published post" } })
+      }
+      // Remove any existing delayed BullMQ jobs for this post
+      if (isQueueAvailable() && publishQueue) {
+        const jobs = await publishQueue.getJobs(["delayed", "waiting"])
+        for (const job of jobs) {
+          if (job.data.post_id === id) await job.remove()
+        }
+      }
+      const updated = await prisma.post.update({
+        where: { id },
+        data: { scheduled_at: new Date(scheduled_at), status: "scheduled" },
+      })
+      return { success: true, item: updated }
+    },
+  )
+
   // GET /v1/publisher/posts/:id/metrics — return stored metrics for a post
   fastify.get(
     "/posts/:id/metrics",
@@ -248,17 +280,28 @@ export default async function publisherRoutes(fastify: FastifyInstance) {
         if (platform === "gmb")
           jobData.gmb_location_name = conn.platform_account_id
 
-        const job = await publishQueue.add(
-          `publish-${platform}-${post_id}`,
-          jobData,
-          {
-            delay,
-            attempts: 3,
-            backoff: { type: "exponential", delay: 60_000 },
-          },
-        )
-
-        if (job.id) jobIds.push(job.id)
+        if (isQueueAvailable() && publishQueue) {
+          // BullMQ path: enqueue with delay (supports scheduling)
+          const job = await publishQueue.add(
+            `publish-${platform}-${post_id}`,
+            jobData,
+            {
+              delay,
+              attempts: 3,
+              backoff: { type: "exponential", delay: 60_000 },
+            },
+          )
+          if (job.id) jobIds.push(job.id)
+        } else if (!scheduled_at) {
+          // No Redis — publish immediately inline (only for "publish now", not schedule)
+          try {
+            await publishPostToPlatform(jobData)
+          } catch (err) {
+            fastify.log.error(err, `Inline publish failed for platform ${platform}`)
+          }
+        }
+        // If scheduled_at but no queue: status is set to 'scheduled' below;
+        // Vercel cron (/v1/cron/publish) will pick it up when the time arrives.
       }
 
       // Update post status
@@ -290,6 +333,9 @@ export default async function publisherRoutes(fastify: FastifyInstance) {
     },
     async (request, reply) => {
       const { jobId } = request.params as { jobId: string }
+      if (!isQueueAvailable() || !publishQueue) {
+        return reply.code(503).send({ error: { code: "QUEUE_UNAVAILABLE", message: "Queue not available in this environment" } })
+      }
       const job = await publishQueue.getJob(jobId)
       if (!job)
         return reply
@@ -382,10 +428,12 @@ export default async function publisherRoutes(fastify: FastifyInstance) {
         })
       }
 
-      // Remove pending jobs from queue
-      const jobs = await publishQueue.getJobs(["delayed", "waiting"])
-      for (const job of jobs) {
-        if (job.data.post_id === postId) await job.remove()
+      // Remove pending jobs from queue (if BullMQ is available)
+      if (isQueueAvailable() && publishQueue) {
+        const jobs = await publishQueue.getJobs(["delayed", "waiting"])
+        for (const job of jobs) {
+          if (job.data.post_id === postId) await job.remove()
+        }
       }
 
       await prisma.post.update({

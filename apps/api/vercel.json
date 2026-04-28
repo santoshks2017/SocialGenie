@@ -12,5 +12,11 @@
   ],
   "routes": [
     { "src": "/(.*)", "dest": "/src/index.ts" }
+  ],
+  "crons": [
+    {
+      "path": "/v1/cron/publish",
+      "schedule": "* * * * *"
+    }
   ]
 }
