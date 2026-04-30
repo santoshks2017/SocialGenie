@@ -349,7 +349,7 @@ function InboxPreview({ stats }: { stats?: DashboardData['stats'] }) {
       .catch(() => {});
   }, []);
 
-  const platformLabel = (p: string) => p === 'google' ? 'Google Review' : p === 'instagram' ? 'Instagram' : 'Facebook';
+  const platformLabel = (p: string) => (p === 'google' || p === 'gmb') ? 'Google Review' : p === 'instagram' ? 'Instagram' : 'Facebook';
   const timeAgo = (iso: string) => {
     const h = Math.floor((Date.now() - new Date(iso).getTime()) / 3_600_000);
     return h < 1 ? 'Just now' : h < 24 ? `${h}h ago` : `${Math.floor(h / 24)}d ago`;
@@ -467,6 +467,7 @@ function ConnectedPanel() {
     facebook:  { label: 'Facebook',  color: '#1877F2' },
     instagram: { label: 'Instagram', color: '#E1306C' },
     google:    { label: 'Google',    color: '#4285F4' },
+    gmb:       { label: 'Google',    color: '#4285F4' },
   };
 
   useEffect(() => {

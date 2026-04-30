@@ -125,7 +125,7 @@ if (!IS_VERCEL) {
     await fastify.listen({ port, host: '0.0.0.0' });
 
     // Start background workers (only if Redis is reachable)
-    if (process.env['NODE_ENV'] !== 'test') {
+    if (process.env['NODE_ENV'] !== 'test' && process.env['REDIS_URL']) {
       startPublishWorker();
       startMetricsWorker();
     }
