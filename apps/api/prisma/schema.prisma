@@ -74,12 +74,15 @@ model PlatformConnection {
   dealer_id             String
   dealer                Dealer   @relation(fields: [dealer_id], references: [id])
   platform              String
+  account_type          String?  // 'page' | 'profile' | 'channel' | 'board' | 'business'
   platform_account_id   String
   platform_account_name String?
+  avatar_url            String?
   access_token          String
   refresh_token         String?
   token_expires_at      DateTime?
   ad_account_id         String?
+  scopes                String?
   is_connected          Boolean  @default(true)
   last_sync_at          DateTime?
   created_at            DateTime @default(now())
