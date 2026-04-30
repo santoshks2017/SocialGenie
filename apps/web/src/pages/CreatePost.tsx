@@ -448,10 +448,9 @@ export default function CreatePost() {
     if (!variants) return;
 
     // Guard: ensure at least one selected platform has a connected account (C3)
-    const connectedSelected = selectedPlatforms.filter((p) => {
-      if (p === 'gmb') return connectedAccounts.includes('google');
-      return connectedAccounts.includes(p);
-    });
+    const connectedSelected = selectedPlatforms.filter((p) =>
+      connectedAccounts.includes(p),
+    );
     if (connectedSelected.length === 0) {
       addToast({
         type: 'error',
@@ -1370,7 +1369,7 @@ export default function CreatePost() {
               <p className="text-xs font-extrabold text-stone-400 uppercase tracking-widest text-center">Platforms</p>
               <div className="flex gap-2">
                 {PLATFORMS.map(({ id, icon: Icon, color, dot }) => {
-                  const isConnected = connectedAccounts.includes(id === 'gmb' ? 'google' : id);
+                  const isConnected = connectedAccounts.includes(id);
                   return (
                     <button
                       key={id}
@@ -1390,7 +1389,7 @@ export default function CreatePost() {
                 })}
               </div>
               {/* Show warning if no selected platform has a connected account */}
-              {selectedPlatforms.length > 0 && !selectedPlatforms.some((p) => connectedAccounts.includes(p === 'gmb' ? 'google' : p)) && (
+              {selectedPlatforms.length > 0 && !selectedPlatforms.some((p) => connectedAccounts.includes(p)) && (
                 <p className="text-[11px] text-amber-600 text-center font-medium bg-amber-50 rounded-lg px-2 py-1.5">
                   No connected accounts — <NavLink to="/accounts" className="underline font-bold">Connect now</NavLink>
                 </p>

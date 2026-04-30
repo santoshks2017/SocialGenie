@@ -29,9 +29,6 @@ import {
 import api from '../services/api';
 import { useToast } from '../components/ui/Toast';
 
-const API_BASE = (import.meta.env.VITE_API_URL as string | undefined)
-  ?? (import.meta.env.DEV ? 'http://127.0.0.1:3001/v1' : '');
-
 interface ConnectedAccount {
   id: string;
   platform: string;
@@ -71,7 +68,7 @@ const SOCIAL_PLATFORMS: PlatformIntegration[] = [
     description: 'Publish posts, manage pages, and support boosted campaigns.',
     color: '#1877F2',
     status: 'live',
-    authUrl: `${API_BASE}/auth/facebook`,
+    authUrl: null, // fetched dynamically from /platforms/connect/facebook
     capabilities: ['Posts', 'Pages', 'Inbox', 'Reviews'],
     icon: MessageCircle,
   },
@@ -86,12 +83,12 @@ const SOCIAL_PLATFORMS: PlatformIntegration[] = [
     icon: Image,
   },
   {
-    id: 'google',
+    id: 'gmb',
     label: 'Google Business',
     description: 'Publish local updates and respond to dealership reviews.',
     color: '#4285F4',
     status: 'live',
-    authUrl: `${API_BASE}/auth/google`,
+    authUrl: null, // fetched dynamically from /platforms/connect/gmb
     capabilities: ['Updates', 'Reviews', 'Locations'],
     icon: Globe,
   },
@@ -281,7 +278,7 @@ export default function AccountsPage() {
   }, [fetchAccounts]);
 
   const handleConnect = (platform: PlatformIntegration) => {
-    if (!platform.authUrl) {
+    if (platform.status === 'via-facebook' || platform.status === 'planned') {
       addToast({
         type: 'info',
         title: `${platform.label} is in the integration pipeline`,
@@ -292,66 +289,17 @@ export default function AccountsPage() {
       return;
     }
 
-    const token = localStorage.getItem('access_token');
-    const url = token ? `${platform.authUrl}?access_token=${encodeURIComponent(token)}` : platform.authUrl;
-
-    const popup = window.open(url, 'sg_oauth', 'width=620,height=720,scrollbars=yes,resizable=yes');
-
-    if (!popup || popup.closed) {
-      // Popup blocked — fall back to full-page redirect
-      window.location.href = url;
-      return;
-    }
-
-    let pollTimer: ReturnType<typeof setInterval>;
-
-    const cleanup = () => {
-      clearInterval(pollTimer);
-      window.removeEventListener('message', onMessage);
-    };
-
-    const onMessage = (event: MessageEvent) => {
-      if (event.origin !== window.location.origin) return;
-
-      if (event.data?.type === 'oauth_success') {
-        cleanup();
-        void fetchAccounts();
-        const { fb, ig, google } = event.data as { fb?: string; ig?: string; google?: string };
-        const parts: string[] = [];
-        if (fb && fb !== '0') parts.push(`${fb} Facebook page(s)`);
-        if (ig && ig !== '0') parts.push(`${ig} Instagram account(s)`);
-        if (google && google !== '0') parts.push(`${google} Google Business location(s)`);
-        addToast({
-          type: 'success',
-          title: 'Connected!',
-          message: parts.length ? `Linked: ${parts.join(', ')}` : 'Account connected successfully.',
-        });
-      } else if (event.data?.type === 'oauth_error') {
-        cleanup();
-        const errorKey = event.data?.error as string;
-        const messages: Record<string, string> = {
-          server_config: 'OAuth is not configured on the server. Contact support.',
-          token_exchange_failed: 'Token exchange failed. Please try again.',
-          no_code: 'Authorization was cancelled.',
-          access_denied: 'Access was denied. Please try again and accept the permissions.',
-        };
+    // Fetch the OAuth redirect URL from the API then navigate to it.
+    // The backend callback will redirect to /settings?tab=platforms&oauth_success=...
+    api.get<{ success: boolean; redirect_url: string }>(`/platforms/connect/${platform.id}`)
+      .then((res) => { window.location.href = res.redirect_url; })
+      .catch(() => {
         addToast({
           type: 'error',
           title: 'Connection failed',
-          message: messages[errorKey] ?? `OAuth error: ${errorKey}`,
+          message: 'Could not start OAuth connection. Check API configuration.',
         });
-      }
-    };
-
-    window.addEventListener('message', onMessage);
-
-    // Fallback: if popup closes without postMessage, refresh accounts anyway
-    pollTimer = setInterval(() => {
-      if (popup.closed) {
-        cleanup();
-        void fetchAccounts();
-      }
-    }, 600);
+      });
   };
 
   const handleWorkflowAction = (integration: WorkflowIntegration) => {
@@ -379,7 +327,7 @@ export default function AccountsPage() {
   };
 
   const getConnectedForPlatform = (platformId: string) =>
-    accounts.filter((a) => a.platform === platformId || (platformId === 'google' && a.platform === 'gmb'));
+    accounts.filter((a) => a.platform === platformId || (platformId === 'gmb' && a.platform === 'google'));
 
   const filteredWorkflowIntegrations = WORKFLOW_INTEGRATIONS.filter((item) => {
     const haystack = `${item.label} ${item.description}`.toLowerCase();
@@ -388,7 +336,7 @@ export default function AccountsPage() {
 
   const filteredAccounts = accounts.filter((account) => {
     const normalizedPlatform = account.platform === 'gmb' ? 'google' : account.platform;
-    const matchesPlatform = accountFilter === 'all' || normalizedPlatform === accountFilter;
+    const matchesPlatform = accountFilter === 'all' || normalizedPlatform === accountFilter || account.platform === accountFilter;
     const matchesQuery = `${account.accountName} ${account.accountId} ${account.platform}`
       .toLowerCase()
       .includes(query.trim().toLowerCase());
@@ -679,7 +627,7 @@ export default function AccountsPage() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filteredAccounts.map((acc) => {
-                  const platformMeta = SOCIAL_PLATFORMS.find((p) => p.id === acc.platform || (p.id === 'google' && acc.platform === 'gmb'));
+                  const platformMeta = SOCIAL_PLATFORMS.find((p) => p.id === acc.platform || (p.id === 'gmb' && acc.platform === 'google'));
                   return (
                     <tr key={acc.id} className="hover:bg-slate-50 transition-colors">
                       <td className="px-5 py-3.5">

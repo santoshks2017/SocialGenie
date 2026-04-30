@@ -59,9 +59,9 @@ function GmbIcon() {
 }
 
 const INITIAL_PLATFORMS: PlatformInfo[] = [
-  { id: 'facebook', name: 'Facebook Page', accountName: 'Cardeko Motors Bangalore', status: 'connected', expiresIn: 45, icon: <FbIcon /> },
-  { id: 'instagram', name: 'Instagram Business', accountName: '@cardekomotors', status: 'connected', expiresIn: 45, icon: <IgIcon /> },
-  { id: 'gmb', name: 'Google My Business', accountName: 'Cardeko Motors - Bangalore', status: 'expired', icon: <GmbIcon /> },
+  { id: 'facebook', name: 'Facebook Page', accountName: 'Not connected', status: 'disconnected', icon: <FbIcon /> },
+  { id: 'instagram', name: 'Instagram Business', accountName: 'Auto-linked via Facebook', status: 'disconnected', icon: <IgIcon /> },
+  { id: 'gmb', name: 'Google My Business', accountName: 'Not connected', status: 'disconnected', icon: <GmbIcon /> },
 ];
 
 const LANGUAGES = [
@@ -122,10 +122,6 @@ export default function SettingsPage() {
       const label = platforms.map((p) => p === 'gmb' ? 'Google Business' : p.charAt(0).toUpperCase() + p.slice(1)).join(' + ');
       addToast({ type: 'success', title: `${label} connected!`, message: pageName ? `Connected as "${pageName}"` : 'Account added successfully.' });
       setActiveTab('platforms');
-      // Re-fetch dealer profile to get fresh connection data
-      api.get<{ success: boolean; profile: Parameters<typeof setPlatforms>[0] extends Array<infer _T> ? never : { platform_connections?: Array<{ platform: string; platform_account_name?: string; is_connected: boolean; token_expires_at?: string }> } }>('/dealer/profile')
-        .then(() => { /* handled by main effect */ })
-        .catch(() => {});
       // Remove OAuth params from URL without full navigation
       const cleaned = new URLSearchParams(searchParams);
       cleaned.delete('oauth_success');
@@ -506,7 +502,7 @@ export default function SettingsPage() {
                 </div>
 
                 <div className="flex gap-2 flex-shrink-0">
-                  {p.status === 'connected' && (
+                  {p.status === 'connected' && p.id !== 'instagram' && (
                     <>
                       <button
                         onClick={() => handleConnect(p.id)}
@@ -522,7 +518,10 @@ export default function SettingsPage() {
                       </button>
                     </>
                   )}
-                  {(p.status === 'disconnected' || p.status === 'expired') && (
+                  {p.id === 'instagram' && p.status === 'disconnected' && (
+                    <span className="text-xs text-gray-400 font-medium px-3 py-1.5">Auto-linked via Facebook</span>
+                  )}
+                  {p.id !== 'instagram' && (p.status === 'disconnected' || p.status === 'expired') && (
                     <Button className="text-sm flex items-center gap-1.5" onClick={() => handleConnect(p.id)}>
                       {p.status === 'expired' ? <><AlertCircle className="w-3.5 h-3.5" /> Reconnect</> : 'Connect'}
                     </Button>
