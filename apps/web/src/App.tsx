@@ -21,7 +21,6 @@ import SettingsPage from './pages/SettingsPage';
 import AuthCallbackPage from './pages/AuthCallbackPage';
 import ConnectProfilesPage from './pages/ConnectProfilesPage';
 import AccountsPage from './pages/AccountsPage';
-import ConnectAccountPage from './pages/ConnectAccountPage';
 import OAuthCallbackPage from './pages/OAuthCallbackPage';
 import PostsPage from './pages/PostsPage';
 import type { UserInfo } from './lib/permissions';
@@ -650,7 +649,7 @@ function AppRoutes() {
       <Route path="/analytics" element={<RequireAuth><AppLayout><AnalyticsPage /></AppLayout></RequireAuth>} />
       <Route path="/boost" element={<RequireAuth><AppLayout><BoostPage /></AppLayout></RequireAuth>} />
       <Route path="/accounts" element={<RequireAuth><AppLayout><AccountsPage /></AppLayout></RequireAuth>} />
-      <Route path="/accounts/create" element={<RequireAuth><AppLayout><ConnectAccountPage /></AppLayout></RequireAuth>} />
+      <Route path="/accounts/create" element={<Navigate to="/accounts" replace />} />
       <Route path="/settings" element={<RequireAuth><AppLayout><SettingsPage /></AppLayout></RequireAuth>} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
