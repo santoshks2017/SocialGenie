@@ -2,7 +2,10 @@ import type { FastifyInstance } from 'fastify';
 import { saveAccount, getAccountsByUser, deleteAccount } from '../services/platformConnections.js';
 import type { Platform } from '../services/platformConnections.js';
 
-const VALID_PLATFORMS = new Set(['facebook', 'instagram', 'google']);
+const VALID_PLATFORMS = new Set([
+  'facebook', 'instagram', 'google', 'gmb',
+  'youtube', 'linkedin', 'twitter', 'tiktok', 'pinterest', 'threads', 'bluesky',
+]);
 
 interface SaveAccountBody {
   platform?: string;
