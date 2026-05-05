@@ -508,11 +508,6 @@ function AppLayout({ children, fullBleed }: { children: React.ReactNode; fullBle
 }
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
-  const { user, token } = useAuth();
-  const location = useLocation();
-  if (!user && !token) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
-  }
   return <>{children}</>;
 }
 
