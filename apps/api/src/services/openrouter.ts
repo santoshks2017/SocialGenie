@@ -171,7 +171,7 @@ export async function generateImage(prompt: string): Promise<Buffer> {
     n: 1,
     size: '1024x1024',
   });
-  const imageData = response.data[0];
+  const imageData = (response.data ?? [])[0];
   if (imageData?.b64_json) {
     return Buffer.from(imageData.b64_json, 'base64');
   }
