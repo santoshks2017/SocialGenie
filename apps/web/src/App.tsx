@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom';
 import {
   Car, Plus, MessageSquare, Bell,
   Calendar, BarChart2, Package, Zap, Settings, Link2,
@@ -33,16 +33,19 @@ const NAV_ITEMS = [
   { to: '/calendar',  icon: Calendar,        label: 'Calendar'               },
   { to: '/analytics', icon: BarChart2,       label: 'Analytics'              },
   { to: '/inbox',     icon: MessageSquare,   label: 'Inbox'                  },
-  { to: '/inventory', icon: Package,         label: 'Inventory'              },
   { to: '/boost',     icon: Zap,             label: 'Boost'                  },
   { to: '/accounts',  icon: Link2,           label: 'Accounts'               },
+];
+
+const COMING_SOON_ITEMS = [
+  { icon: Package, label: 'Inventory' },
+  { icon: Video,   label: 'AI Video'  },
 ];
 
 // ─── Sidebar ──────────────────────────────────────────────────────────────────
 function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose: () => void }) {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
   const [inboxPending, setInboxPending] = useState<number>(0);
   const initials = user?.name
     ? user.name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()
@@ -53,8 +56,6 @@ function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose: () => 
       .then((res) => setInboxPending(res.stats?.inboxPending ?? 0))
       .catch(() => {});
   }, []);
-
-  const isVideoMode = location.pathname === '/create' && location.search.includes('mode=video');
 
   const handleLogout = () => { logout(); navigate('/onboarding'); };
 
@@ -120,24 +121,22 @@ function Sidebar({ mobileOpen, onClose }: { mobileOpen: boolean; onClose: () => 
           </NavLink>
         ))}
 
-        {/* AI Video — coming soon; uses manual active check to avoid false-positive at /create */}
-        <NavLink
-          to="/create?mode=video"
-          onClick={onClose}
-          className={() =>
-            `group flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13.5px] font-medium transition-all ${
-              isVideoMode
-                ? 'bg-white/10 text-white'
-                : 'text-white/50 hover:text-white hover:bg-white/5'
-            }`
-          }
-        >
-          <Video className={`w-[18px] h-[18px] flex-shrink-0 transition-colors ${isVideoMode ? 'text-white' : 'text-white/40 group-hover:text-white/70'}`} />
-          AI Video
-          <span className="ml-auto bg-slate-500/20 text-slate-400 text-[10px] font-bold rounded-full px-1.5 py-0.5">
-            Soon
-          </span>
-        </NavLink>
+        {/* Coming Soon section */}
+        <div className="pt-3 pb-1 px-3">
+          <p className="text-[10px] font-bold text-white/20 tracking-widest uppercase">Coming Soon</p>
+        </div>
+        {COMING_SOON_ITEMS.map(({ icon: Icon, label }) => (
+          <div
+            key={label}
+            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-[13.5px] font-medium text-white/25 cursor-default select-none"
+          >
+            <Icon className="w-[18px] h-[18px] flex-shrink-0 text-white/15" />
+            {label}
+            <span className="ml-auto bg-white/5 text-white/25 text-[10px] font-bold rounded-full px-1.5 py-0.5">
+              Soon
+            </span>
+          </div>
+        ))}
       </nav>
 
       {/* Divider */}
