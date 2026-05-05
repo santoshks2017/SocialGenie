@@ -1,3 +1,4 @@
+// OpenRouter service — captions (OPENROUTER_API_KEY) + images (OPENROUTER_IMAGE_API_KEY)
 import OpenAI from 'openai';
 import type { DealerContext, InventoryContext, GeneratedCaptions, CaptionVariant } from './openai.js';
 
