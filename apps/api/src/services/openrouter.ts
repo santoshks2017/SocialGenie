@@ -140,3 +140,48 @@ export async function generateInboxReply(
 export function isOpenRouterAvailable(): boolean {
   return !!(process.env['OPENROUTER_API_KEY']);
 }
+
+// ── Image generation (separate API key) ───────────────────────────────────────
+let imageClient: OpenAI | null = null;
+
+function getImageClient(): OpenAI {
+  if (!imageClient) {
+    const apiKey = process.env['OPENROUTER_IMAGE_API_KEY'];
+    if (!apiKey) throw new Error('OPENROUTER_IMAGE_API_KEY is not set');
+    imageClient = new OpenAI({
+      apiKey,
+      baseURL: 'https://openrouter.ai/api/v1',
+      defaultHeaders: {
+        'HTTP-Referer': process.env['FRONTEND_URL'] ?? 'http://localhost:5173',
+        'X-Title': 'SocialGenie',
+      },
+    });
+  }
+  return imageClient;
+}
+
+const OPENROUTER_IMAGE_MODEL = process.env['OPENROUTER_IMAGE_MODEL'] ?? 'black-forest-labs/flux-1.1-pro';
+
+export async function generateImage(prompt: string): Promise<Buffer> {
+  const client = getImageClient();
+  const response = await client.images.generate({
+    model: OPENROUTER_IMAGE_MODEL,
+    prompt: prompt.slice(0, 1000),
+    n: 1,
+    size: '1024x1024',
+  });
+  const imageData = response.data[0];
+  if (imageData?.b64_json) {
+    return Buffer.from(imageData.b64_json, 'base64');
+  }
+  if (imageData?.url) {
+    const res = await fetch(imageData.url, { signal: AbortSignal.timeout(30_000) });
+    if (!res.ok) throw new Error(`Failed to fetch generated image: ${res.status}`);
+    return Buffer.from(await res.arrayBuffer());
+  }
+  throw new Error('No image data returned from OpenRouter');
+}
+
+export function isOpenRouterImageAvailable(): boolean {
+  return !!(process.env['OPENROUTER_IMAGE_API_KEY']);
+}

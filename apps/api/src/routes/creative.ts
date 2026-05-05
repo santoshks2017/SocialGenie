@@ -13,7 +13,9 @@ import {
 } from "../services/groq.js"
 import {
   generateCaptions as openrouterGenerateCaptions,
+  generateImage as openrouterGenerateImage,
   isOpenRouterAvailable,
+  isOpenRouterImageAvailable,
 } from "../services/openrouter.js"
 import {
   renderCreatives,
@@ -65,7 +67,7 @@ async function generateGradientBackground(primaryColor = '#f97316'): Promise<Buf
 // Simple in-memory cache: key → {result, expires}
 const captionCache = new Map<string, { result: unknown; expires: number }>()
 
-// Try Groq → OpenRouter → mock
+// Try OpenRouter → Groq → mock
 async function generateCaptionsAI(
   prompt: string,
   dealerContext: Parameters<typeof openaiGenerateCaptions>[1],
@@ -73,16 +75,7 @@ async function generateCaptionsAI(
   includeHindi = false,
   inspirationPosts?: string[],
 ): Promise<GeneratedCaptions> {
-  // 1. Try Groq (primary)
-  if (isGroqAvailable()) {
-    try {
-      return await groqGenerateCaptions(prompt, dealerContext, inventoryContext, inspirationPosts)
-    } catch (err) {
-      console.error("Groq generation failed, falling back to OpenRouter:", err)
-    }
-  }
-
-  // 2. Try OpenRouter (fallback)
+  // 1. Try OpenRouter (primary)
   if (isOpenRouterAvailable()) {
     try {
       return await openrouterGenerateCaptions(
@@ -92,7 +85,16 @@ async function generateCaptionsAI(
         inspirationPosts,
       )
     } catch (err) {
-      console.error("OpenRouter generation failed, falling back to mock:", err)
+      console.error("OpenRouter generation failed, falling back to Groq:", err)
+    }
+  }
+
+  // 2. Try Groq (fallback)
+  if (isGroqAvailable()) {
+    try {
+      return await groqGenerateCaptions(prompt, dealerContext, inventoryContext, inspirationPosts)
+    } catch (err) {
+      console.error("Groq generation failed, falling back to mock:", err)
     }
   }
 
@@ -405,16 +407,27 @@ export default async function creativeRoutes(fastify: FastifyInstance) {
           .send({ error: { code: "NOT_FOUND", message: "Dealer not found" } })
 
       try {
-        // Use Cloudflare SDXL if available, otherwise fall back to a Sharp-rendered
-        // gradient background that looks polished with the dealer overlay.
+        // Image generation priority: OpenRouter → Cloudflare → gradient fallback
+        const imagePrompt =
+          `Professional automotive photography for Indian car dealership. ` +
+          `${body.headline.slice(0, 120)}. ` +
+          `Photorealistic, cinematic lighting, 4K quality, no text overlay, ` +
+          `clean background, showroom or open road setting.`
         let imageBuffer: Buffer;
-        if (isCloudflareAvailable()) {
-          const imagePrompt =
-            `Professional automotive photography for Indian car dealership. ` +
-            `${body.headline.slice(0, 120)}. ` +
-            `Photorealistic, cinematic lighting, 4K quality, no text overlay, ` +
-            `clean background, showroom or open road setting.`
-          imageBuffer = await cfGenerateImage(imagePrompt.slice(0, 500))
+        if (isOpenRouterImageAvailable()) {
+          try {
+            imageBuffer = await openrouterGenerateImage(imagePrompt.slice(0, 500))
+          } catch (err) {
+            fastify.log.warn(err, 'OpenRouter image generation failed, using gradient fallback')
+            imageBuffer = await generateGradientBackground(dealer.primary_color ?? '#f97316')
+          }
+        } else if (isCloudflareAvailable()) {
+          try {
+            imageBuffer = await cfGenerateImage(imagePrompt.slice(0, 500))
+          } catch (err) {
+            fastify.log.warn(err, 'Cloudflare image generation failed, using gradient fallback')
+            imageBuffer = await generateGradientBackground(dealer.primary_color ?? '#f97316')
+          }
         } else {
           imageBuffer = await generateGradientBackground(dealer.primary_color ?? '#f97316')
         }
