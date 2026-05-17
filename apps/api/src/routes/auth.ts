@@ -1,13 +1,18 @@
+import { randomInt, createHmac, randomBytes, timingSafeEqual } from "crypto"
 import type { FastifyInstance } from "fastify"
 import { prisma } from "../db/prisma.js"
 import { resolvePermissions, ROLES } from "../lib/permissions.js"
 import type { Role, JwtUser } from "../lib/permissions.js"
-import { setOtp, getOtp, deleteOtp } from "../lib/otpStore.js"
+import {
+  setOtp, getOtp, deleteOtp,
+  checkAndIncrSendRate, checkVerifyLockout, recordFailedVerify, clearFailedVerify,
+} from "../lib/otpStore.js"
 import { SEED_PAGES, scrapePublicPage, extractPatterns } from "../services/socialScraper.js"
 import { saveAccount } from "../services/platformConnections.js"
 
 function generateOtp(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString()
+  // randomInt from Node's crypto module — cryptographically secure (unlike Math.random)
+  return randomInt(100000, 1000000).toString()
 }
 
 async function sendOtp(phone: string, otp: string): Promise<void> {
@@ -59,6 +64,19 @@ export default async function authRoutes(fastify: FastifyInstance) {
       })
     }
 
+    // Per-phone rate limit (1/min, 5/hr, 20/day)
+    const rateCheck = await checkAndIncrSendRate(phone)
+    if (!rateCheck.allowed) {
+      reply.header("Retry-After", String(rateCheck.retryAfter ?? 60))
+      return reply.code(429).send({
+        error: {
+          code: "RATE_LIMITED",
+          message: "Too many OTP requests for this number. Please wait before trying again.",
+          retry_after: rateCheck.retryAfter,
+        },
+      })
+    }
+
     const otp = generateOtp()
     await setOtp(phone, otp)
 
@@ -86,17 +104,33 @@ export default async function authRoutes(fastify: FastifyInstance) {
       })
     }
 
+    // Check if this phone is locked out due to too many failed attempts
+    const lockout = await checkVerifyLockout(phone)
+    if (lockout.locked) {
+      reply.header("Retry-After", String(lockout.retryAfter ?? 3600))
+      return reply.code(423).send({
+        error: {
+          code: "ACCOUNT_LOCKED",
+          message: "Too many incorrect OTP attempts. Please request a new OTP after the lockout period.",
+          retry_after: lockout.retryAfter,
+        },
+      })
+    }
+
     // Dev bypass
-    const isDev = process.env["NODE_ENV"] === "development"
+    const isDev = process.env["NODE_ENV"] === "development" && process.env["OTP_PROVIDER"] !== "twilio" && process.env["OTP_PROVIDER"] !== "msg91"
     const storedOtp = await getOtp(phone)
     const valid = (isDev && otp === "1234") || (storedOtp && storedOtp === otp)
 
     if (!valid) {
+      await recordFailedVerify(phone)
       return reply.code(400).send({
         error: { code: "INVALID_OTP", message: "Incorrect or expired OTP" },
       })
     }
 
+    // Success — clear failure counter and OTP
+    await clearFailedVerify(phone)
     await deleteOtp(phone)
 
     const ownerPhone = process.env["OWNER_PHONE"]
@@ -390,16 +424,32 @@ export default async function authRoutes(fastify: FastifyInstance) {
   const FB_API_VERSION = 'v18.0';
   const FB_SCOPES = ['pages_show_list', 'pages_read_engagement', 'instagram_basic', 'instagram_content_publish'].join(',');
 
-  // Encode dealer_id into the OAuth state so the callback knows which dealer to associate accounts with.
+  // Encode dealer_id into a tamper-proof HMAC-signed OAuth state.
+  // Format (base64url): dealerId|nonce|timestamp|hmac-sha256-sig
+  // The 10-minute expiry prevents state replay; timingSafeEqual prevents timing attacks.
   function encodeOAuthState(dealerId: string): string {
-    return Buffer.from(dealerId, 'utf8').toString('base64url');
+    const secret = process.env['OAUTH_STATE_SECRET'] ?? process.env['JWT_SECRET'] ?? 'changeme';
+    const nonce = randomBytes(16).toString('hex');
+    const ts = Date.now().toString();
+    const payload = `${dealerId}|${nonce}|${ts}`;
+    const sig = createHmac('sha256', secret).update(payload).digest('hex');
+    return Buffer.from(`${payload}|${sig}`, 'utf8').toString('base64url');
   }
   function decodeOAuthState(state: string): string | null {
     try {
-      const decoded = Buffer.from(state, 'base64url').toString('utf8');
-      // Basic sanity check — dealer IDs are UUIDs or similar short strings
-      if (!decoded || decoded.length > 200) return null;
-      return decoded;
+      const secret = process.env['OAUTH_STATE_SECRET'] ?? process.env['JWT_SECRET'] ?? 'changeme';
+      const raw = Buffer.from(state, 'base64url').toString('utf8');
+      const parts = raw.split('|');
+      if (parts.length !== 4) return null;
+      const [dealerId, nonce, ts, sig] = parts as [string, string, string, string];
+      const payload = `${dealerId}|${nonce}|${ts}`;
+      const expected = createHmac('sha256', secret).update(payload).digest('hex');
+      const sigBuf = Buffer.from(sig, 'hex');
+      const expBuf = Buffer.from(expected, 'hex');
+      if (sigBuf.length !== expBuf.length || !timingSafeEqual(sigBuf, expBuf)) return null;
+      if (Date.now() - parseInt(ts) > 10 * 60 * 1000) return null;
+      if (!dealerId || dealerId.length > 200) return null;
+      return dealerId;
     } catch {
       return null;
     }

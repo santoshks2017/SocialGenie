@@ -18,6 +18,14 @@ declare module 'fastify' {
   }
 }
 
+// Dev autologin is only active when BOTH conditions hold:
+//   1. NODE_ENV is explicitly NOT "production"
+//   2. ALLOW_DEV_AUTOLOGIN=true is set
+// This means a staging/preview env that forgets NODE_ENV defaults to requiring a real token.
+const DEV_AUTOLOGIN =
+  process.env['NODE_ENV'] !== 'production' &&
+  process.env['ALLOW_DEV_AUTOLOGIN'] === 'true';
+
 export async function registerJwt(fastify: FastifyInstance) {
   const secret = process.env['JWT_SECRET'];
   if (!secret) throw new Error('JWT_SECRET env var is required');
@@ -27,9 +35,19 @@ export async function registerJwt(fastify: FastifyInstance) {
     sign: { expiresIn: process.env['JWT_EXPIRES_IN'] ?? '15m' },
   });
 
+  // Startup log so the mode is always visible in deployment logs
+  if (DEV_AUTOLOGIN) {
+    fastify.log.warn(
+      '[AUTH] ⚠️  DEV AUTOLOGIN ENABLED — all unauthenticated requests are granted admin access. ' +
+      'Set NODE_ENV=production or remove ALLOW_DEV_AUTOLOGIN=true to disable.',
+    );
+  } else {
+    fastify.log.info(`[AUTH] JWT authentication active (NODE_ENV=${process.env['NODE_ENV'] ?? 'unset'})`);
+  }
+
   fastify.decorate('authenticate', async (request: FastifyRequest, reply: FastifyReply) => {
-    // Development bypass: auto-create or find first admin DealerUser
-    if (process.env['NODE_ENV'] !== 'production' && !request.headers.authorization) {
+    // Dev autologin: auto-create or find first admin DealerUser (local dev only)
+    if (DEV_AUTOLOGIN && !request.headers.authorization) {
       const { prisma } = await import('../db/prisma.js');
 
       // Ensure a dealer org exists

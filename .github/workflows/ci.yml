@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  typecheck-and-build:
+    name: Typecheck & Build
+    runs-on: ubuntu-latest
+
+    env:
+      # Dummy DB URLs so Prisma validate/generate can parse the schema without a real database.
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ci
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/ci
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      # Prisma client must be generated before typechecking the API
+      - name: Generate Prisma client
+        working-directory: apps/api
+        run: npx prisma generate
+
+      # Validate the Prisma schema itself
+      - name: Validate Prisma schema
+        working-directory: apps/api
+        run: npx prisma validate
+
+      - name: Typecheck API
+        working-directory: apps/api
+        run: npx tsc --noEmit
+
+      - name: Typecheck Web
+        working-directory: apps/web
+        run: npx tsc --noEmit
+
+      - name: Unit tests
+        working-directory: apps/api
+        run: npm test
+
+      - name: Build API
+        working-directory: apps/api
+        run: npm run build
+
+      - name: Build Web
+        working-directory: apps/web
+        run: npm run build

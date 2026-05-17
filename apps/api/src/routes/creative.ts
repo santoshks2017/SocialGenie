@@ -33,6 +33,7 @@ import {
   compositeLayered,
   type DealerBranding,
 } from "../services/layeredCompositor.js"
+import { cacheGet, cacheSet } from "../lib/redisCache.js"
 
 const execFileAsync = promisify(execFile)
 
@@ -69,8 +70,8 @@ async function generateGradientBackground(primaryColor = '#f97316'): Promise<Buf
   return sharp(Buffer.from(svg)).png().toBuffer()
 }
 
-// Simple in-memory cache: key → {result, expires}
-const captionCache = new Map<string, { result: unknown; expires: number }>()
+// In-memory fallback cache used when Redis is unavailable
+const captionMemCache = new Map<string, { result: unknown; expires: number }>()
 
 // Try Groq → OpenRouter → mock
 async function generateCaptionsAI(
@@ -243,13 +244,20 @@ export default async function creativeRoutes(fastify: FastifyInstance) {
           }
         : undefined
 
-      // Cache captions (not images)
-      const cacheKey = `${dealer_id}:${prompt}:${vehicleMatch?.id ?? "none"}`
-      const cached = captionCache.get(cacheKey)
-      const cachedCaptions =
-        !force && cached && cached.expires > Date.now()
-          ? (cached.result as GeneratedCaptions)
-          : null
+      // Cache captions (not images). Redis is primary; in-memory Map is the fallback.
+      const cacheKey = `captions:${dealer_id}:${prompt}:${vehicleMatch?.id ?? "none"}`
+      const TTL_SECONDS = 24 * 60 * 60
+
+      let cachedCaptions: GeneratedCaptions | null = null
+      if (!force) {
+        const redisCached = await cacheGet<GeneratedCaptions>(cacheKey)
+        if (redisCached) {
+          cachedCaptions = redisCached
+        } else {
+          const mem = captionMemCache.get(cacheKey)
+          if (mem && mem.expires > Date.now()) cachedCaptions = mem.result as GeneratedCaptions
+        }
+      }
 
       let captions: GeneratedCaptions
       if (cachedCaptions) {
@@ -264,10 +272,8 @@ export default async function creativeRoutes(fastify: FastifyInstance) {
             inspirationPosts.length > 0 ? inspirationPosts : undefined,
             postType,
           )
-          captionCache.set(cacheKey, {
-            result: captions,
-            expires: Date.now() + 24 * 60 * 60 * 1000,
-          })
+          await cacheSet(cacheKey, captions, TTL_SECONDS)
+          captionMemCache.set(cacheKey, { result: captions, expires: Date.now() + TTL_SECONDS * 1000 })
         } catch (err) {
           fastify.log.error(err, "Caption generation failed")
           return reply
