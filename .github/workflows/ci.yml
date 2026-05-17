@@ -11,6 +11,11 @@ jobs:
     name: Typecheck & Build
     runs-on: ubuntu-latest
 
+    env:
+      # Dummy DB URLs so Prisma validate/generate can parse the schema without a real database.
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ci
+      DIRECT_URL: postgresql://postgres:postgres@localhost:5432/ci
+
     steps:
       - uses: actions/checkout@v4
 
@@ -40,6 +45,10 @@ jobs:
       - name: Typecheck Web
         working-directory: apps/web
         run: npx tsc --noEmit
+
+      - name: Unit tests
+        working-directory: apps/api
+        run: npm test
 
       - name: Build API
         working-directory: apps/api
