@@ -144,15 +144,24 @@ export default async function boostRoutes(fastify: FastifyInstance) {
     const { id } = request.params as { id: string };
     const campaign = await prisma.boostCampaign.findFirst({ where: { id, dealer_id } });
     if (!campaign) return reply.code(404).send({ error: 'Not found' });
-    return { metrics: (campaign.metrics as Record<string, unknown>) ?? { reach: 0, impressions: 0, clicks: 0, spend: 0, cpc: 0, ctr: 0 } };
+    const stored = campaign.metrics as Record<string, unknown> | null;
+    return {
+      metrics: stored ?? { reach: 0, impressions: 0, clicks: 0, spend: 0, cpc: 0, ctr: 0 },
+      metricsSource: 'stored',
+      metricsNote: stored ? undefined : 'No metrics have been synced yet. Data will appear once the campaign is active and metrics are fetched from the platform.',
+    };
   });
 
-  // POST /v1/boost/reach-estimate — estimated reach based on budget
+  // POST /v1/boost/reach-estimate — rough budget-based reach estimate
+  // These are industry-average heuristics (₹12–₹20 CPM for automotive in IN),
+  // not real-time Meta/Google data. Always labeled as estimates on the frontend.
   fastify.post('/reach-estimate', { preHandler: [fastify.authenticate] }, async (request) => {
     const { dailyBudget = 1000 } = request.body as { dailyBudget?: number; targeting?: unknown };
     return {
       minReach: Math.round(dailyBudget * 12),
       maxReach: Math.round(dailyBudget * 20),
+      estimatedOnly: true,
+      disclaimer: 'Reach estimates are based on industry-average CPM heuristics and are not a guarantee of actual campaign performance.',
     };
   });
 }

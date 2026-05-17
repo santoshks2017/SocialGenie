@@ -1,4 +1,4 @@
-import { randomInt } from "crypto"
+import { randomInt, createHmac, randomBytes, timingSafeEqual } from "crypto"
 import type { FastifyInstance } from "fastify"
 import { prisma } from "../db/prisma.js"
 import { resolvePermissions, ROLES } from "../lib/permissions.js"
@@ -424,16 +424,32 @@ export default async function authRoutes(fastify: FastifyInstance) {
   const FB_API_VERSION = 'v18.0';
   const FB_SCOPES = ['pages_show_list', 'pages_read_engagement', 'instagram_basic', 'instagram_content_publish'].join(',');
 
-  // Encode dealer_id into the OAuth state so the callback knows which dealer to associate accounts with.
+  // Encode dealer_id into a tamper-proof HMAC-signed OAuth state.
+  // Format (base64url): dealerId|nonce|timestamp|hmac-sha256-sig
+  // The 10-minute expiry prevents state replay; timingSafeEqual prevents timing attacks.
   function encodeOAuthState(dealerId: string): string {
-    return Buffer.from(dealerId, 'utf8').toString('base64url');
+    const secret = process.env['OAUTH_STATE_SECRET'] ?? process.env['JWT_SECRET'] ?? 'changeme';
+    const nonce = randomBytes(16).toString('hex');
+    const ts = Date.now().toString();
+    const payload = `${dealerId}|${nonce}|${ts}`;
+    const sig = createHmac('sha256', secret).update(payload).digest('hex');
+    return Buffer.from(`${payload}|${sig}`, 'utf8').toString('base64url');
   }
   function decodeOAuthState(state: string): string | null {
     try {
-      const decoded = Buffer.from(state, 'base64url').toString('utf8');
-      // Basic sanity check — dealer IDs are UUIDs or similar short strings
-      if (!decoded || decoded.length > 200) return null;
-      return decoded;
+      const secret = process.env['OAUTH_STATE_SECRET'] ?? process.env['JWT_SECRET'] ?? 'changeme';
+      const raw = Buffer.from(state, 'base64url').toString('utf8');
+      const parts = raw.split('|');
+      if (parts.length !== 4) return null;
+      const [dealerId, nonce, ts, sig] = parts as [string, string, string, string];
+      const payload = `${dealerId}|${nonce}|${ts}`;
+      const expected = createHmac('sha256', secret).update(payload).digest('hex');
+      const sigBuf = Buffer.from(sig, 'hex');
+      const expBuf = Buffer.from(expected, 'hex');
+      if (sigBuf.length !== expBuf.length || !timingSafeEqual(sigBuf, expBuf)) return null;
+      if (Date.now() - parseInt(ts) > 10 * 60 * 1000) return null;
+      if (!dealerId || dealerId.length > 200) return null;
+      return dealerId;
     } catch {
       return null;
     }

@@ -1,4 +1,16 @@
 import 'dotenv/config';
+import * as Sentry from '@sentry/node';
+
+// Initialize Sentry before any other imports so it can instrument them.
+// SENTRY_DSN must be set in the environment; if absent, Sentry is disabled.
+if (process.env['SENTRY_DSN']) {
+  Sentry.init({
+    dsn: process.env['SENTRY_DSN'],
+    environment: process.env['NODE_ENV'] ?? 'development',
+    tracesSampleRate: process.env['NODE_ENV'] === 'production' ? 0.1 : 1.0,
+  });
+}
+
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
@@ -79,6 +91,11 @@ if (!IS_VERCEL) {
 
 await registerJwt(fastify);
 await registerActivityLog(fastify);
+
+// Capture unhandled Fastify errors in Sentry (no-op if DSN not set)
+if (process.env['SENTRY_DSN']) {
+  Sentry.setupFastifyErrorHandler(fastify);
+}
 
 // Routes
 fastify.register(authRoutes,      { prefix: '/v1/auth' });
