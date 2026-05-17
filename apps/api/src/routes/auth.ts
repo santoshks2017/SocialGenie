@@ -1,13 +1,18 @@
+import { randomInt } from "crypto"
 import type { FastifyInstance } from "fastify"
 import { prisma } from "../db/prisma.js"
 import { resolvePermissions, ROLES } from "../lib/permissions.js"
 import type { Role, JwtUser } from "../lib/permissions.js"
-import { setOtp, getOtp, deleteOtp } from "../lib/otpStore.js"
+import {
+  setOtp, getOtp, deleteOtp,
+  checkAndIncrSendRate, checkVerifyLockout, recordFailedVerify, clearFailedVerify,
+} from "../lib/otpStore.js"
 import { SEED_PAGES, scrapePublicPage, extractPatterns } from "../services/socialScraper.js"
 import { saveAccount } from "../services/platformConnections.js"
 
 function generateOtp(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString()
+  // randomInt from Node's crypto module — cryptographically secure (unlike Math.random)
+  return randomInt(100000, 1000000).toString()
 }
 
 async function sendOtp(phone: string, otp: string): Promise<void> {
@@ -59,6 +64,19 @@ export default async function authRoutes(fastify: FastifyInstance) {
       })
     }
 
+    // Per-phone rate limit (1/min, 5/hr, 20/day)
+    const rateCheck = await checkAndIncrSendRate(phone)
+    if (!rateCheck.allowed) {
+      reply.header("Retry-After", String(rateCheck.retryAfter ?? 60))
+      return reply.code(429).send({
+        error: {
+          code: "RATE_LIMITED",
+          message: "Too many OTP requests for this number. Please wait before trying again.",
+          retry_after: rateCheck.retryAfter,
+        },
+      })
+    }
+
     const otp = generateOtp()
     await setOtp(phone, otp)
 
@@ -86,17 +104,33 @@ export default async function authRoutes(fastify: FastifyInstance) {
       })
     }
 
+    // Check if this phone is locked out due to too many failed attempts
+    const lockout = await checkVerifyLockout(phone)
+    if (lockout.locked) {
+      reply.header("Retry-After", String(lockout.retryAfter ?? 3600))
+      return reply.code(423).send({
+        error: {
+          code: "ACCOUNT_LOCKED",
+          message: "Too many incorrect OTP attempts. Please request a new OTP after the lockout period.",
+          retry_after: lockout.retryAfter,
+        },
+      })
+    }
+
     // Dev bypass
-    const isDev = process.env["NODE_ENV"] === "development"
+    const isDev = process.env["NODE_ENV"] === "development" && process.env["OTP_PROVIDER"] !== "twilio" && process.env["OTP_PROVIDER"] !== "msg91"
     const storedOtp = await getOtp(phone)
     const valid = (isDev && otp === "1234") || (storedOtp && storedOtp === otp)
 
     if (!valid) {
+      await recordFailedVerify(phone)
       return reply.code(400).send({
         error: { code: "INVALID_OTP", message: "Incorrect or expired OTP" },
       })
     }
 
+    // Success — clear failure counter and OTP
+    await clearFailedVerify(phone)
     await deleteOtp(phone)
 
     const ownerPhone = process.env["OWNER_PHONE"]
