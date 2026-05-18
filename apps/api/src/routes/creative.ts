@@ -597,6 +597,80 @@ export default async function creativeRoutes(fastify: FastifyInstance) {
     },
   )
 
+  // POST /v1/creatives/generate-scenes — automotive background scenes per pose
+  fastify.post(
+    '/generate-scenes',
+    { preHandler: [fastify.authenticate] },
+    async (request, reply) => {
+      const body = request.body as { brief: string; model?: string; poses?: string[] }
+
+      if (!body.brief?.trim()) {
+        return reply.code(400).send({ error: { code: 'INVALID_INPUT', message: 'brief is required' } })
+      }
+
+      const poses = (body.poses ?? ['front-three-quarter', 'side-profile', 'hero-low-angle']).slice(0, 3)
+
+      function inferModelClassLocal(name: string): string {
+        const m = (name ?? '').toLowerCase()
+        if (/sierra|creta|brezza|nexon|venue|seltos|sonet|kushaq|taigun|harrier|safari|hector/.test(m)) return 'compact-suv'
+        if (/fortuner|endeavour|gloster|alcazar|innova/.test(m)) return 'suv'
+        if (/swift|baleno|i20|altroz|polo|tiago|punch/.test(m)) return 'hatchback'
+        if (/dzire|amaze|aura|tigor|rapid|virtus|slavia|verna|city/.test(m)) return 'sedan'
+        if (/audi|bmw|mercedes|jaguar|volvo/.test(m)) return 'luxury-sedan'
+        return 'compact-suv'
+      }
+
+      function pickSceneTypeLocal(cls: string, brief: string): string {
+        const b = brief.toLowerCase()
+        if (/diwali|festive|holi|navratri/.test(b)) return 'modern upscale Indian city street at dusk with warm festive ambient light, wet asphalt, bokeh of warm lights, no people'
+        if (/adventure|rugged|off-road/.test(b) && /suv/.test(cls)) return 'wide dirt road at golden hour, rolling hills, dramatic sky'
+        if (/premium|luxury|elegant/.test(b)) return 'glass-facade building plaza at blue hour, polished granite, minimal architecture'
+        if (/sport|energetic|fast|dynamic/.test(b)) return 'empty highway at night, motion-blurred streetlights, wet asphalt'
+        if (/family|safe|trust/.test(b)) return 'quiet suburban Indian street at afternoon, tree-lined road, soft light'
+        if (/showroom|test drive|studio/.test(b)) return 'clean automotive studio with light-gray cyclorama, subtle floor reflection'
+        const fallbacks: Record<string, string> = {
+          'compact-suv': 'Indian metro street at golden hour, glass buildings in soft bokeh',
+          'suv': 'coastal highway at sunset, smooth tarmac, distant hills',
+          'sedan': 'business district street at dusk, polished asphalt',
+          'hatchback': 'vibrant urban street with colorful market stalls in bokeh',
+          'luxury-sedan': 'private mansion driveway with stone-paved approach',
+        }
+        return fallbacks[cls] ?? 'clean studio with seamless gradient backdrop'
+      }
+
+      const modelClass = inferModelClassLocal(body.model ?? '')
+      const sceneType = pickSceneTypeLocal(modelClass, body.brief)
+
+      const results = await Promise.all(
+        poses.map(async (pose) => {
+          const prompt = (
+            `Empty automotive background scene for a ${pose.replace(/-/g, ' ')} view car advertisement. ` +
+            `SCENE: ${sceneType}. ` +
+            `NO cars, NO people, NO text, NO logos. Leave open space in lower-center for vehicle placement. ` +
+            `Premium automotive editorial photography, cinematic lighting, 4K.`
+          ).slice(0, 500)
+
+          try {
+            if (isCloudflareAvailable()) {
+              const buf = await cfGenerateImage(prompt)
+              const filename = `${randomUUID()}_scene_${pose}.jpg`
+              const url = await uploadFile(buf, `creatives/${filename}`, 'image/jpeg', CREATIVES_DIR)
+              return { url, pose }
+            }
+            throw new Error('CF not available')
+          } catch {
+            const buf = await generateGradientBackground('#f97316')
+            const filename = `${randomUUID()}_scene_${pose}_grad.png`
+            const url = await uploadFile(buf, `creatives/${filename}`, 'image/png', CREATIVES_DIR)
+            return { url, pose }
+          }
+        })
+      )
+
+      return { scenes: results }
+    }
+  )
+
   // POST /v1/creatives/generate-image  (Cloudflare Workers AI fallback for image generation)
   fastify.post(
     "/generate-image",
