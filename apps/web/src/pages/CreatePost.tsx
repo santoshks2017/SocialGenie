@@ -14,6 +14,7 @@ import {
   Languages, Minimize2, Hash, ChevronDown,
 } from 'lucide-react';
 import api from '../services/api';
+import { CanvasStudio } from '../components/CreatePost/CanvasStudio';
 
 // ─── Platform SVG icons ───────────────────────────────────────────────────────
 function FbIcon({ className }: { className?: string }) {
@@ -147,6 +148,8 @@ export default function CreatePost() {
   const [isGeneratingImages, setIsGeneratingImages] = useState(false);
   const [imageLoadingStates, setImageLoadingStates] = useState<boolean[]>([false, false, false]);
   const [connectedAccounts, setConnectedAccounts] = useState<string[]>([]);
+  const [canvasStudioOpen, setCanvasStudioOpen] = useState(false);
+  const [canvasDesignIdx,  setCanvasDesignIdx]  = useState(0);
 
   // Post-generation toolbar states
   const [isTransforming, setIsTransforming] = useState(false);
@@ -1011,9 +1014,9 @@ export default function CreatePost() {
                           const aiImg = aiImageUrls[i] ?? null;
                           const loading = imageLoadingStates[i] ?? false;
                           return (
+                            <div key={i} className="flex flex-col gap-1.5">
                             <button
-                              key={i}
-                              onClick={() => setSelectedDesign(i)}   // design selection is independent of caption (M7)
+                              onClick={() => setSelectedDesign(i)}
                               className={`relative rounded-2xl overflow-hidden border-2 transition-all group ${
                                 selectedDesign === i ? 'border-orange-500 shadow-lg shadow-orange-100 scale-[1.02]' : 'border-stone-200 hover:border-stone-300'
                               }`}
@@ -1041,6 +1044,13 @@ export default function CreatePost() {
                                 <p className="text-white text-xs font-bold">{theme.label}</p>
                               </div>
                             </button>
+                            <button
+                              onClick={() => { setCanvasDesignIdx(i); setCanvasStudioOpen(true); }}
+                              className="w-full py-1.5 text-[11px] font-bold text-orange-600 border border-orange-200 bg-orange-50 hover:bg-orange-100 rounded-xl transition-colors"
+                            >
+                              ✏ Edit in Canvas Studio
+                            </button>
+                            </div>
                           );
                         })}
                       </div>
@@ -1507,6 +1517,26 @@ export default function CreatePost() {
           </div>
         );
       })()}
+      <CanvasStudio
+        open={canvasStudioOpen}
+        onClose={() => setCanvasStudioOpen(false)}
+        brief={prompt}
+        model={prompt}
+        initialHeading={
+          variants
+            ? ((englishCaptions ?? variants.captions)[canvasDesignIdx]?.caption_text ?? '')
+                .split(/[.!?\n]/)[0]?.trim().slice(0, 70) ?? ''
+            : ''
+        }
+        onExport={(dataUrl) => {
+          setAiImageUrls((prev) => {
+            const next = [...prev] as (string | null)[];
+            next[canvasDesignIdx] = dataUrl;
+            return next;
+          });
+          setSelectedDesign(canvasDesignIdx);
+        }}
+      />
     </div>
   );
 }
